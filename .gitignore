@@ -1,0 +1,37 @@
+# Backend (Java/Maven)
+study-room-booking-backend/target/
+study-room-booking-backend/.mvn/
+study-room-booking-backend/mvnw
+study-room-booking-backend/mvnw.cmd
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Frontend (Node/React)
+study-room-booking-frontend/node_modules/
+study-room-booking-frontend/build/
+study-room-booking-frontend/.env.local
+study-room-booking-frontend/.env.development.local
+study-room-booking-frontend/.env.test.local
+study-room-booking-frontend/.env.production.local
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+.env
+*.swp
+*.swo
+*~
