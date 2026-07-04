@@ -28,6 +28,7 @@ public class UserAccount {
     private String studentNo;
     private String className;
     private String phone;
+    private String email;
 
     @Column(nullable = false)
     private Boolean enabled = true;
@@ -113,6 +114,14 @@ public class UserAccount {
 
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public Boolean getEnabled() {

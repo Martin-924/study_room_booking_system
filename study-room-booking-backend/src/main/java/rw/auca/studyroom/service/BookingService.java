@@ -34,6 +34,9 @@ public class BookingService {
 
     @Autowired
     private UserAccountRepository userAccountRepository;
+
+    @Autowired
+    private ConfigService configService;
     
     public List<Booking> getAllBookings() {
         releaseExpiredBookings();
@@ -93,8 +96,9 @@ public class BookingService {
             List<Booking> userBookings = bookingRepository.findByUserIdAndBookingDateAndStatus(
                 user.getId(), booking.getBookingDate(), "ACTIVE"
             );
-            if (userBookings.size() >= 3) {
-                throw new RuntimeException("单日最多预约 3 次");
+            int maxPerDay = configService.getInt("max_bookings_per_day", 3);
+            if (userBookings.size() >= maxPerDay) {
+                throw new RuntimeException("单日最多预约 " + maxPerDay + " 次");
             }
             
             List<Booking> existingBookings = bookingRepository.findBySeatIdAndBookingDateAndStatus(
@@ -155,25 +159,39 @@ public class BookingService {
         if (Boolean.TRUE.equals(booking.getCheckedIn())) {
             throw new RuntimeException("已签到，无需重复签到");
         }
-        // 校验签到时间：仅限预约日期当天 + 时间段内（允许提前15分钟）
+        // 校验签到时间：仅限预约当天，在开始时间到开始后30分钟内签到
         LocalDate today = LocalDate.now();
         if (booking.getBookingDate() == null || !today.toString().equals(booking.getBookingDate())) {
             throw new RuntimeException("仅限预约当天签到");
         }
-        if (booking.getStartTime() == null || booking.getEndTime() == null) {
+        if (booking.getStartTime() == null) {
             throw new RuntimeException("预约时间不完整");
         }
         LocalTime now = LocalTime.now();
         LocalTime startTime = LocalTime.parse(booking.getStartTime());
-        LocalTime endTime = LocalTime.parse(booking.getEndTime());
-        LocalTime earliest = startTime.minusMinutes(15);
-        if (now.isBefore(earliest)) {
-            throw new RuntimeException("签到时间未到，请在预约开始时间前15分钟内签到");
+        int windowMin = configService.getInt("check_in_window_minutes", 30);
+        LocalTime deadline = startTime.plusMinutes(windowMin);
+        if (now.isBefore(startTime)) {
+            throw new RuntimeException("签到时间未到，请在预约开始时间后签到");
         }
-        if (!now.isBefore(endTime)) {
-            throw new RuntimeException("预约时段已结束，无法签到");
+        if (!now.isBefore(deadline)) {
+            throw new RuntimeException("签到时间已过（预约开始后" + windowMin + "分钟内可签到）");
         }
         booking.setCheckedIn(true);
+        return bookingRepository.save(booking);
+    }
+
+    public Booking checkOutBooking(UUID bookingId) {
+        Booking booking = bookingRepository.findById(bookingId)
+            .orElseThrow(() -> new RuntimeException("预约不存在"));
+        if (!"ACTIVE".equals(booking.getStatus())) {
+            throw new RuntimeException("当前预约状态不可签退");
+        }
+        if (!Boolean.TRUE.equals(booking.getCheckedIn())) {
+            throw new RuntimeException("尚未签到，无需签退");
+        }
+        booking.setReleased(true);
+        booking.setStatus("RELEASED");
         return bookingRepository.save(booking);
     }
 
@@ -188,12 +206,28 @@ public class BookingService {
         List<Booking> activeBookings = bookingRepository.findByStatus("ACTIVE");
         LocalDateTime now = LocalDateTime.now();
         for (Booking booking : activeBookings) {
-            if (Boolean.TRUE.equals(booking.getCheckedIn()) || booking.getBookingDate() == null || booking.getStartTime() == null) {
+            if (booking.getBookingDate() == null || booking.getStartTime() == null) {
                 continue;
             }
-            LocalDateTime startAt = LocalDateTime.of(LocalDate.parse(booking.getBookingDate()), LocalTime.parse(booking.getStartTime()));
-            if (startAt.plusMinutes(15).isBefore(now)) {
-                markNoShowAndSave(booking);
+            LocalDate date = LocalDate.parse(booking.getBookingDate());
+            LocalTime startTime = LocalTime.parse(booking.getStartTime());
+            LocalDateTime startAt = LocalDateTime.of(date, startTime);
+
+            // Type 1: 未签到且超过开始时间 N 分钟 → 违规（未按时签到）
+            if (!Boolean.TRUE.equals(booking.getCheckedIn())) {
+                int noShowGrace = configService.getInt("no_show_grace_minutes", 30);
+                if (startAt.plusMinutes(noShowGrace).isBefore(now)) {
+                    markNoShowAndSave(booking);
+                }
+            }
+            // Type 2: 已签到但超过结束时间 N 分钟仍未签退 → 违规（未按时签退）
+            else if (booking.getEndTime() != null) {
+                LocalTime endTime = LocalTime.parse(booking.getEndTime());
+                LocalDateTime endAt = LocalDateTime.of(date, endTime);
+                int checkoutGrace = configService.getInt("checkout_grace_minutes", 30);
+                if (endAt.plusMinutes(checkoutGrace).isBefore(now)) {
+                    markNoShowAndSave(booking);
+                }
             }
         }
     }
@@ -205,7 +239,8 @@ public class BookingService {
         if (booking.getUserId() != null) {
             userAccountRepository.findById(booking.getUserId()).ifPresent(user -> {
                 user.setViolationCount(user.getViolationCount() + 1);
-                if (user.getViolationCount() >= 3) {
+                int threshold = configService.getInt("violation_blacklist_threshold", 3);
+                if (user.getViolationCount() >= threshold) {
                     user.setBlacklisted(true);
                 }
                 userAccountRepository.save(user);

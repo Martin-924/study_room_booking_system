@@ -3,6 +3,8 @@ echo ========================================
 echo CLEANING PROJECT FOR SUBMISSION
 echo ========================================
 echo.
+echo This script removes build artifacts to reduce project size.
+echo.
 
 echo Removing backend target folder...
 if exist "study-room-booking-backend\target" (
@@ -22,11 +24,24 @@ if exist "study-room-booking-frontend\node_modules" (
 )
 
 echo.
+echo Removing frontend build output...
+if exist "study-room-booking-frontend\build" (
+    rmdir /s /q "study-room-booking-frontend\build"
+    echo ✓ Frontend build folder removed
+) else (
+    echo ✓ Frontend build folder not found
+)
+
+echo.
 echo ========================================
 echo CLEANUP COMPLETE!
 echo ========================================
 echo.
 echo Your project is now ready for submission.
 echo You can now zip the folder and upload it.
+echo.
+echo To restore dependencies after unzipping:
+echo   Backend: cd study-room-booking-backend ^&^& mvn clean install
+echo   Frontend: cd study-room-booking-frontend ^&^& npm install
 echo.
 pause

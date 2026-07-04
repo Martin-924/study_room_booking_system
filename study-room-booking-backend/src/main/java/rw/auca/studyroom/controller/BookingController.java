@@ -89,6 +89,15 @@ public class BookingController {
         }
     }
 
+    @PutMapping("/{bookingId}/check-out")
+    public ResponseEntity<?> checkOutBooking(@PathVariable UUID bookingId) {
+        try {
+            return new ResponseEntity<>(bookingService.checkOutBooking(bookingId), HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
+    }
+
     @PutMapping("/{bookingId}/no-show")
     public ResponseEntity<?> markNoShow(@PathVariable UUID bookingId) {
         try {

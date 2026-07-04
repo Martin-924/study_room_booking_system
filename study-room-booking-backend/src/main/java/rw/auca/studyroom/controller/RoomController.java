@@ -75,4 +75,27 @@ public class RoomController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
         }
     }
+
+    @GetMapping("/{id}/all-seats")
+    public ResponseEntity<?> getAllSeats(@PathVariable UUID id) {
+        try {
+            List<Map<String, Object>> seats = roomService.getAllSeats(id);
+            return new ResponseEntity<>(seats, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        }
+    }
+
+    @PutMapping("/{roomId}/seats/{seatId}")
+    public ResponseEntity<?> updateSeat(
+            @PathVariable UUID roomId,
+            @PathVariable UUID seatId,
+            @RequestBody Map<String, Object> body) {
+        try {
+            Map<String, Object> updated = roomService.updateSeat(roomId, seatId, body);
+            return new ResponseEntity<>(updated, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
+    }
 }

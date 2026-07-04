@@ -30,4 +30,9 @@ public class ReportController {
     public ResponseEntity<List<Map<String, Object>>> getTimeSlotStats(@RequestParam(required = false) String date) {
         return ResponseEntity.ok(reportService.getTimeSlotStats(date));
     }
+
+    @GetMapping("/no-show-stats")
+    public ResponseEntity<Map<String, Object>> getNoShowStats() {
+        return ResponseEntity.ok(reportService.getNoShowStats());
+    }
 }

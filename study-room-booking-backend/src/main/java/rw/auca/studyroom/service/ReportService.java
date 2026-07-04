@@ -58,7 +58,14 @@ public class ReportService {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Room room : roomRepository.findAll()) {
             long seatCount = seatRepository.countByRoomIdAndEnabledTrue(room.getId());
-            long active = bookingRepository.findByRoomIdAndBookingDateAndStatus(room.getId(), targetDate, "ACTIVE").size();
+            // 统计当日所有预约（不含已取消的）用于计算使用率
+            List<Booking> dayBookings = bookingRepository.findByRoomIdAndBookingDate(room.getId(), targetDate);
+            long active = 0;
+            for (Booking b : dayBookings) {
+                if (!"CANCELLED".equals(b.getStatus())) {
+                    active++;
+                }
+            }
             Map<String, Object> item = new HashMap<>();
             item.put("roomId", room.getId());
             item.put("roomName", room.getName());
@@ -75,38 +82,49 @@ public class ReportService {
     public List<Map<String, Object>> getTimeSlotStats(String date) {
         bookingService.releaseExpiredBookings();
         String targetDate = date == null || date.isBlank() ? LocalDate.now().toString() : date;
-        String[][] slots = {
-            {"08:00", "10:00"},
-            {"10:00", "12:00"},
-            {"14:00", "16:00"},
-            {"16:00", "18:00"},
-            {"19:00", "21:00"}
-        };
-        List<Booking> bookings = bookingRepository.findByStatus("ACTIVE");
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (String[] slot : slots) {
-            int count = 0;
-            for (Booking booking : bookings) {
-                if (targetDate.equals(booking.getBookingDate()) && timesOverlap(slot[0], slot[1], booking.getStartTime(), booking.getEndTime())) {
-                    count++;
-                }
+        List<Booking> bookings = bookingRepository.findAll();
+
+        // 按小时统计预约数（08:00 ~ 22:00）
+        Map<Integer, Integer> hourCount = new HashMap<>();
+        for (int h = 8; h <= 22; h++) {
+            hourCount.put(h, 0);
+        }
+        for (Booking booking : bookings) {
+            if (targetDate.equals(booking.getBookingDate()) && booking.getStartTime() != null) {
+                try {
+                    LocalTime st = LocalTime.parse(booking.getStartTime());
+                    int h = st.getHour();
+                    hourCount.put(h, hourCount.getOrDefault(h, 0) + 1);
+                } catch (Exception ignored) {}
             }
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int h = 8; h <= 22; h++) {
             Map<String, Object> item = new HashMap<>();
-            item.put("label", slot[0] + "-" + slot[1]);
-            item.put("count", count);
+            item.put("hour", h);
+            item.put("label", String.format("%02d:00", h));
+            item.put("count", hourCount.getOrDefault(h, 0));
             result.add(item);
         }
         return result;
     }
 
-    private boolean timesOverlap(String startA, String endA, String startB, String endB) {
-        if (startA == null || endA == null || startB == null || endB == null) {
-            return false;
+    public Map<String, Object> getNoShowStats() {
+        bookingService.releaseExpiredBookings();
+        List<Booking> noShows = bookingRepository.findByStatus("NO_SHOW");
+        int type1 = 0; // 未签到
+        int type2 = 0; // 签到了但未签退
+        for (Booking b : noShows) {
+            if (Boolean.TRUE.equals(b.getCheckedIn())) {
+                type2++;
+            } else {
+                type1++;
+            }
         }
-        LocalTime aStart = LocalTime.parse(startA);
-        LocalTime aEnd = LocalTime.parse(endA);
-        LocalTime bStart = LocalTime.parse(startB);
-        LocalTime bEnd = LocalTime.parse(endB);
-        return aStart.isBefore(bEnd) && bStart.isBefore(aEnd);
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", noShows.size());
+        result.put("noCheckIn", type1);
+        result.put("noCheckOut", type2);
+        return result;
     }
 }

@@ -124,6 +124,48 @@ public class RoomService {
         return result;
     }
 
+    public List<Map<String, Object>> getAllSeats(UUID roomId) {
+        Room room = roomRepository.findById(roomId)
+            .orElseThrow(() -> new RuntimeException("自习室不存在"));
+        List<Seat> seats = seatRepository.findByRoomIdOrderByRowIndexAscColumnIndexAsc(roomId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Seat seat : seats) {
+            Map<String, Object> view = new HashMap<>();
+            view.put("id", seat.getId());
+            view.put("seatNo", seat.getSeatNo());
+            view.put("rowIndex", seat.getRowIndex());
+            view.put("columnIndex", seat.getColumnIndex());
+            view.put("enabled", seat.getEnabled());
+            view.put("nearWindow", seat.getNearWindow());
+            view.put("powerSocket", seat.getPowerSocket());
+            result.add(view);
+        }
+        return result;
+    }
+
+    public Map<String, Object> updateSeat(UUID roomId, UUID seatId, Map<String, Object> body) {
+        Seat seat = seatRepository.findById(seatId)
+            .orElseThrow(() -> new RuntimeException("座位不存在"));
+        if (!seat.getRoomId().equals(roomId)) {
+            throw new RuntimeException("座位不属于该自习室");
+        }
+        if (body.containsKey("enabled")) {
+            seat.setEnabled((Boolean) body.get("enabled"));
+        }
+        if (body.containsKey("nearWindow")) {
+            seat.setNearWindow((Boolean) body.get("nearWindow"));
+        }
+        if (body.containsKey("powerSocket")) {
+            seat.setPowerSocket((Boolean) body.get("powerSocket"));
+        }
+        seatRepository.save(seat);
+        Map<String, Object> view = new HashMap<>();
+        view.put("id", seat.getId());
+        view.put("seatNo", seat.getSeatNo());
+        view.put("enabled", seat.getEnabled());
+        return view;
+    }
+
     public void syncSeats(Room room) {
         int rows = room.getRowCount() == null || room.getRowCount() < 1 ? 1 : room.getRowCount();
         int columns = room.getColumnCount() == null || room.getColumnCount() < 1 ? 1 : room.getColumnCount();

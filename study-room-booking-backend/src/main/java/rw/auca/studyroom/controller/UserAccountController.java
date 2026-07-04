@@ -65,6 +65,15 @@ public class UserAccountController {
         }
     }
 
+    @PutMapping("/{id}/profile")
+    public ResponseEntity<?> updateProfile(@PathVariable UUID id, @RequestBody Map<String, String> body) {
+        try {
+            return ResponseEntity.ok(userAccountService.updateProfile(id, body));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
+    }
+
     @PutMapping("/{id}/blacklist")
     public ResponseEntity<?> blacklist(@PathVariable UUID id, @RequestBody Map<String, Boolean> request) {
         try {

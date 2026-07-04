@@ -28,9 +28,10 @@ public class UserAccountService {
         return userAccountRepository.findById(id);
     }
 
-    public Map<String, Object> login(String username, String password) {
-        UserAccount user = userAccountRepository.findByUsername(username)
-            .orElseThrow(() -> new RuntimeException("账号或密码错误"));
+    public Map<String, Object> login(String usernameOrStudentNo, String password) {
+        UserAccount user = userAccountRepository.findByUsername(usernameOrStudentNo)
+            .orElseGet(() -> userAccountRepository.findByStudentNo(usernameOrStudentNo)
+                .orElseThrow(() -> new RuntimeException("账号或密码错误")));
         if (!Boolean.TRUE.equals(user.getEnabled())) {
             throw new RuntimeException("账号已停用，请联系管理员");
         }
@@ -98,6 +99,32 @@ public class UserAccountService {
         userAccountRepository.save(user);
     }
 
+    public Map<String, Object> updateProfile(UUID id, Map<String, String> body) {
+        UserAccount user = userAccountRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("账号不存在"));
+        if (body.containsKey("username") && !body.get("username").equals(user.getUsername())) {
+            String newUsername = body.get("username").trim();
+            if (newUsername.isBlank()) {
+                throw new RuntimeException("昵称不能为空");
+            }
+            if (userAccountRepository.existsByUsername(newUsername)) {
+                throw new RuntimeException("昵称已被使用");
+            }
+            user.setUsername(newUsername);
+        }
+        if (body.containsKey("email")) {
+            user.setEmail(body.get("email") == null ? null : body.get("email").trim());
+        }
+        if (body.containsKey("phone")) {
+            user.setPhone(body.get("phone") == null ? null : body.get("phone").trim());
+        }
+        if (body.containsKey("className")) {
+            user.setClassName(body.get("className") == null ? null : body.get("className").trim());
+        }
+        UserAccount saved = userAccountRepository.save(user);
+        return toPublicMap(saved);
+    }
+
     public UserAccount setBlacklist(UUID id, boolean blacklisted) {
         UserAccount user = userAccountRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("账号不存在"));
@@ -113,8 +140,6 @@ public class UserAccountService {
         String password = request.get("password");
         String realName = request.get("realName");
         String studentNo = request.get("studentNo");
-        String className = request.get("className");
-        String phone = request.get("phone");
 
         if (username == null || username.isBlank()) {
             throw new RuntimeException("用户名不能为空");
@@ -128,15 +153,6 @@ public class UserAccountService {
         if (realName == null || realName.isBlank()) {
             throw new RuntimeException("姓名不能为空");
         }
-        if (studentNo == null || studentNo.isBlank()) {
-            throw new RuntimeException("学号不能为空");
-        }
-        if (className == null || className.isBlank()) {
-            throw new RuntimeException("班级不能为空");
-        }
-        if (phone == null || phone.isBlank()) {
-            throw new RuntimeException("手机号不能为空");
-        }
 
         UserAccount user = new UserAccount();
         user.setUsername(username.trim());
@@ -146,9 +162,10 @@ public class UserAccountService {
         user.setEnabled(true);
         user.setBlacklisted(false);
         user.setViolationCount(0);
-        user.setStudentNo(studentNo.trim());
-        user.setClassName(className.trim());
-        user.setPhone(phone.trim());
+        user.setStudentNo(studentNo == null ? null : studentNo.trim());
+        user.setClassName(request.get("className") == null ? null : request.get("className").trim());
+        user.setPhone(request.get("phone") == null ? null : request.get("phone").trim());
+        user.setEmail(request.get("email") == null ? null : request.get("email").trim());
 
         UserAccount saved = userAccountRepository.save(user);
         return toPublicMap(saved);
@@ -163,6 +180,7 @@ public class UserAccountService {
         result.put("studentNo", user.getStudentNo());
         result.put("className", user.getClassName());
         result.put("phone", user.getPhone());
+        result.put("email", user.getEmail());
         result.put("enabled", user.getEnabled());
         result.put("blacklisted", user.getBlacklisted());
         result.put("violationCount", user.getViolationCount());

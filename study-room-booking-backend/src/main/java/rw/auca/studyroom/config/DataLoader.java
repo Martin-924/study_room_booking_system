@@ -11,6 +11,7 @@ import rw.auca.studyroom.model.UserRole;
 import rw.auca.studyroom.repository.BuildingRepository;
 import rw.auca.studyroom.repository.SeatRepository;
 import rw.auca.studyroom.repository.UserAccountRepository;
+import rw.auca.studyroom.service.ConfigService;
 import rw.auca.studyroom.service.RoomService;
 import rw.auca.studyroom.service.UserAccountService;
 
@@ -29,8 +30,12 @@ public class DataLoader implements CommandLineRunner {
     @Autowired
     private RoomService roomService;
 
+    @Autowired
+    private ConfigService configService;
+
     @Override
     public void run(String... args) {
+        seedConfig();
         if (userAccountRepository.count() == 0) {
             UserAccount admin = new UserAccount("admin", UserAccountService.DEFAULT_PASSWORD, "系统管理员", UserRole.ADMIN);
             userAccountRepository.save(admin);
@@ -97,5 +102,13 @@ public class DataLoader implements CommandLineRunner {
             seat.setEnabled(false);
             seatRepository.save(seat);
         });
+    }
+
+    private void seedConfig() {
+        configService.set("max_bookings_per_day", "3");
+        configService.set("check_in_window_minutes", "30");
+        configService.set("violation_blacklist_threshold", "3");
+        configService.set("no_show_grace_minutes", "30");
+        configService.set("checkout_grace_minutes", "30");
     }
 }
