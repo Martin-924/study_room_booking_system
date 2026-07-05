@@ -12,14 +12,22 @@ http://localhost:8081/api
 
 ### 1. 登录
 
-支持使用**昵称（username）**或**学号（studentNo）**登录。
+支持使用**昵称（username）**登录；**学号（studentNo）**由前端自动查询用户名后登录。
 
 **端点：** `POST /auth/login`
 
-**请求体：**
+**请求体（昵称登录）：**
 ```json
 {
   "username": "admin",
+  "password": "123456"
+}
+```
+
+**请求体（学号登录 — 前端自动转换，后端仅接受 username）：**
+```json
+{
+  "username": "2024001",
   "password": "123456"
 }
 ```
@@ -144,8 +152,8 @@ http://localhost:8081/api
 | `PUT` | `/rooms/{id}` | 修改自习室并同步座位 |
 | `DELETE` | `/rooms/{id}` | 删除自习室 |
 | `GET` | `/rooms/{id}/seats?date=&startTime=&endTime=` | 按日期和时间段查询座位状态 |
-| `GET` | `/rooms/{id}/all-seats` | 获取自习室全部座位（用于编辑弹窗） |
-| `PUT` | `/rooms/{roomId}/seats/{seatId}` | 更新单个座位属性（如启用/停用） |
+| `GET` | `/rooms/{id}/all-seats` | 获取自习室全部座位（用于编辑弹窗）。**注意：** 该接口可能不存在（404），前端已实现备选方案，按行列数自动生成本地座位。 |
+| `PUT` | `/rooms/{roomId}/seats/{seatId}` | 更新单个座位属性（如启用/停用）。**注意：** API 不可用时静默忽略。 |
 
 ### 座位状态查询响应示例
 
@@ -230,7 +238,15 @@ http://localhost:8081/api
 | `GET` | `/reports/overview` | 运行概况（学生数、自习室数、座位数、进行中预约等） |
 | `GET` | `/reports/room-usage?date=YYYY-MM-DD` | 各自习室当日使用率（不含已取消预约） |
 | `GET` | `/reports/time-slots?date=YYYY-MM-DD` | 各小时预约数分布（08:00~22:00） |
-| `GET` | `/reports/no-show-stats` | 违规分类统计（未签到/未签退数量） |
+| `GET` | `/reports/no-show-stats` | 违规分类统计（未签到/未签退数量）。**注意：** 该接口可能返回 404，前端已实现备选方案，从全部预约中自动计算 NO_SHOW 数据。 |
+
+### 数据报表前端计算补充
+
+当后端 API 返回空数据或不可用时，前端会自动从已加载的预约数据中重新计算：
+
+- **预约时段分布**：遍历所有非 CANCELLED 预约，按开始时间归入 2 小时时段统计
+- **各自习室使用率**：按时长加权计算（占用座位小时 ÷ 总可用座位小时 × 100%）
+- **违规统计**：统计 STATUS = 'NO_SHOW' 的预约记录
 
 ---
 
@@ -357,5 +373,5 @@ CREATE TABLE bookings (
 
 ---
 
-**API 版本：** 2.1.0
-**最后更新：** 2026-07-04
+**API 版本：** 2.2.0
+**最后更新：** 2026-07-05

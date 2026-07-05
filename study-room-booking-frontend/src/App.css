@@ -1,18 +1,23 @@
-* {
-  box-sizing: border-box;
+/* ======== Tailwind 指令 ======== */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ======== 基础全局 ======== */
+* { box-sizing: border-box; }
+
+html, body {
+  font-family: 'Instrument Serif', serif;
 }
 
 body {
   margin: 0;
-  background: #eef3f1;
+  background: #f5f7f6;
   color: #1f2a2e;
-  font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
 }
 
-button,
-input,
-select {
-  font: inherit;
+button, input, select {
+  font-family: system-ui, -apple-system, sans-serif;
 }
 
 button {
@@ -25,8 +30,69 @@ button:active {
   transform: scale(0.97);
 }
 
-/* ========== 登录页 ========== */
+/* ======== 液态玻璃效果 ======== */
+.liquid-glass {
+  background: rgba(255, 255, 255, 0.01);
+  background-blend-mode: luminosity;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: none;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
 
+.liquid-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.4px;
+  background: linear-gradient(180deg,
+    rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.15) 20%,
+    rgba(255,255,255,0) 40%, rgba(255,255,255,0) 60%,
+    rgba(255,255,255,0.15) 80%, rgba(255,255,255,0.45) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ======== Hero 输入框 ======== */
+.hero-input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.hero-input:focus {
+  border-color: rgba(255,255,255,0.7);
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.1);
+}
+
+.hero-input::placeholder {
+  color: rgba(255,255,255,0.5);
+}
+
+/* ======== 浮动动画 ======== */
+@keyframes float {
+  0%, 100% { transform: translateY(0px) scale(1.03); }
+  50% { transform: translateY(-6px) scale(1.03); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ======== 登录页（备用/降级样式） ======== */
 .login-page {
   min-height: 100vh;
   display: grid;
@@ -103,7 +169,7 @@ button:active {
 .inline-field {
   display: grid;
   gap: 7px;
-  color: #405057;
+  color: #1f2a2e;
   font-size: 14px;
   font-weight: 700;
 }
@@ -118,7 +184,7 @@ select {
   min-height: 44px;
   padding: 10px 14px;
   border: 1.5px solid #d5e0dd;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff;
   color: #1f2a2e;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -129,6 +195,16 @@ select:focus {
   outline: none;
   border-color: #1f8a70;
   box-shadow: 0 0 0 3px rgba(31, 138, 112, 0.15);
+}
+
+input::placeholder,
+select::placeholder {
+  color: #9aabaa;
+}
+
+select option {
+  background: #fff;
+  color: #1f2a2e;
 }
 
 .primary-btn,
@@ -148,11 +224,13 @@ select:focus {
 .primary-btn {
   background: #166f5d;
   color: #fff;
+  border: none;
 }
 
 .primary-btn:hover {
   background: #0f5a4b;
   box-shadow: 0 4px 14px rgba(22, 111, 93, 0.3);
+  transform: translateY(-1px);
 }
 
 .primary-btn:disabled {
@@ -167,6 +245,7 @@ select:focus {
 .demo-accounts button {
   background: #e6f0ed;
   color: #17584d;
+  border: none;
 }
 
 .ghost-btn:hover,
@@ -216,6 +295,10 @@ select:focus {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 264px 1fr;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(31,138,112,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(31,138,112,0.03) 0%, transparent 40%),
+    linear-gradient(180deg, #f5f7f6 0%, #eef3f1 100%);
 }
 
 .sidebar {
@@ -226,8 +309,11 @@ select:focus {
   flex-direction: column;
   gap: 24px;
   padding: 24px 18px;
-  background: linear-gradient(180deg, #123c3a 0%, #0e2f2d 100%);
-  color: #f1fbf8;
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(0,0,0,0.04);
+  color: #1f2a2e;
 }
 
 .brand {
@@ -243,7 +329,7 @@ select:focus {
   place-items: center;
   border-radius: 10px;
   background: linear-gradient(135deg, #d7f2e8, #a8dfcf);
-  color: #123c3a;
+  color: #166f5d;
   font-weight: 900;
   font-size: 20px;
 }
@@ -258,7 +344,7 @@ select:focus {
 .brand small,
 .user-card small {
   margin-top: 3px;
-  color: #accac4;
+  color: #5a7a74;
   font-size: 12px;
 }
 
@@ -275,16 +361,17 @@ select:focus {
   padding: 12px 14px;
   border-radius: 8px;
   background: transparent;
-  color: #d9ece7;
+  color: #2d3f44;
   cursor: pointer;
   text-align: left;
   font-size: 14px;
+  transition: all 0.15s;
 }
 
 .sidebar nav button.active,
 .sidebar nav button:hover {
-  background: #1f8a70;
-  color: #fff;
+  background: #e8f5ef;
+  color: #166f5d;
 }
 
 .user-card {
@@ -293,11 +380,12 @@ select:focus {
   gap: 6px;
   padding: 16px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
+  background: #f4faf8;
+  border: 1px solid #e2eae7;
 }
 
 .user-card span {
-  color: #9ff1d2;
+  color: #1f8a70;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -305,22 +393,24 @@ select:focus {
 
 .user-card strong {
   font-size: 15px;
+  color: #173d3a;
 }
 
 .user-card button {
   margin-top: 10px;
-  color: #123c3a;
-  background: #d7f2e8;
+  color: #fff;
+  background: #166f5d;
 }
 
 .user-card button:hover {
-  background: #c0e8db;
+  background: #0f5a4b;
 }
 
 .content {
   min-width: 0;
   padding: 32px;
   animation: fadeIn 0.3s ease;
+  background: transparent;
 }
 
 /* ========== 页面头部 ========== */
@@ -336,11 +426,12 @@ select:focus {
   font-size: 28px;
   color: #123c3a;
   letter-spacing: 0;
+  font-weight: 700;
 }
 
 .page-header p:last-child {
   margin: 0;
-  color: #65747a;
+  color: #3d5852;
   font-size: 14px;
 }
 
@@ -361,19 +452,21 @@ select:focus {
 .metric,
 .room-card {
   border: 1px solid #e2eae7;
-  border-radius: 12px;
-  background: #fff;
+  border-radius: 14px;
+  background: #ffffff;
   box-shadow: 0 4px 16px rgba(24, 60, 55, 0.06);
-  transition: box-shadow 0.2s;
+  transition: all 0.3s ease;
 }
 
 .panel:hover,
 .room-card:hover {
   box-shadow: 0 8px 28px rgba(24, 60, 55, 0.1);
+  transform: translateY(-1px);
 }
 
 .panel {
   padding: 24px;
+  color: #1f2a2e;
 }
 
 .panel h3,
@@ -381,6 +474,7 @@ select:focus {
   margin: 0 0 16px;
   color: #173d3a;
   font-size: 16px;
+  font-weight: 700;
 }
 
 .toolbar {
@@ -406,16 +500,18 @@ select:focus {
 
 .metric span {
   display: block;
-  color: #6b797e;
+  color: #3d5852;
   font-size: 13px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .metric strong {
   display: block;
   margin-top: 8px;
   font-size: 26px;
-  color: #123c3a;
+  color: #173d3a;
 }
 
 /* ========== 热力/条形图 ========== */
@@ -438,7 +534,7 @@ select:focus {
 .muted,
 td small {
   display: block;
-  color: #718188;
+  color: #3d5852;
   font-size: 13px;
 }
 
@@ -448,6 +544,14 @@ td small {
   overflow: hidden;
   border-radius: 999px;
   background: #e7efec;
+}
+
+.heat-track span,
+.bar-row i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #34b282, #e2b441);
 }
 
 .heat-track span,
@@ -529,6 +633,7 @@ td small {
   display: grid;
   gap: 14px;
   padding: 20px;
+  color: #405057;
 }
 
 .room-card strong {
@@ -540,7 +645,7 @@ td small {
 .room-card span,
 .room-card p {
   margin: 4px 0 0;
-  color: #65747a;
+  color: #3d5852;
   font-size: 13px;
 }
 
@@ -617,6 +722,7 @@ td small {
   min-width: 0;
 }
 
+
 .time-range-input span {
   color: #5a6a70;
   font-size: 13px;
@@ -635,6 +741,7 @@ td small {
   justify-content: center;
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   animation: fadeIn 0.15s ease;
 }
 
@@ -646,6 +753,7 @@ td small {
   width: 90%;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
   animation: modalSlideIn 0.2s ease;
+  color: #405057;
 }
 
 @keyframes modalSlideIn {
@@ -770,7 +878,7 @@ td small {
   flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 16px;
-  color: #5a6a70;
+  color: #2d3f44;
   font-size: 13px;
   font-weight: 700;
 }
@@ -889,6 +997,7 @@ td {
   text-align: left;
   vertical-align: middle;
   font-size: 14px;
+  color: #1f2a2e;
 }
 
 th {
@@ -899,7 +1008,7 @@ th {
 }
 
 tbody tr {
-  transition: background 0.12s;
+  transition: background 0.15s;
 }
 
 tbody tr:hover {
@@ -923,7 +1032,7 @@ tbody tr:hover {
 }
 
 .profile-summary span {
-  color: #65747a;
+  color: #3d5852;
 }
 
 /* ========== 注册面板 ========== */
