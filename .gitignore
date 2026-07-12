@@ -27,6 +27,7 @@ study-room-booking-frontend/.pnp.js
 *.iws
 *.ipr
 .DS_Store
+.claude-plugin/
 
 # Logs
 npm-debug.log*
