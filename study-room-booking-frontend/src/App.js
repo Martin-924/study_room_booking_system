@@ -485,8 +485,25 @@ function Shell({ user, onLogout, tabs, activeTab, setActiveTab, children }) {
 
 // ======== 管理员仪表盘 ========
 // ======== 管理员首页面板 ========
-function AdminHomePage({ overview, usage, user, onNavigate }) {
-  const topRooms = (usage || []).slice(0, 5);
+function AdminHomePage({ overview, usage, rooms, bookings, user, onNavigate }) {
+  // 从全量非取消预约计算各自习室热门程度
+  const topRooms = useMemo(() => {
+    if (!rooms || !bookings) return [];
+    const active = bookings.filter(b => b.status !== 'CANCELLED');
+    const total = active.length;
+    if (total === 0) return [];
+    const stats = rooms.map(room => {
+      const count = active.filter(b => b.roomId === room.id).length;
+      return {
+        roomId: room.id,
+        roomName: room.name,
+        buildingName: room.buildingName || '未分配楼栋',
+        floorNumber: room.floorNumber || 1,
+        usageRate: Math.round((count / total) * 100),
+      };
+    });
+    return stats.sort((a, b) => b.usageRate - a.usageRate).slice(0, 5);
+  }, [rooms, bookings]);
   return (
     <div className="stack">
       <div
@@ -616,7 +633,7 @@ function AdminDashboard({ user, onLogout }) {
       <Header title={activeTab === 'home' ? '管理控制台' : '管理员工作台'} subtitle={activeTab === 'home' ? '平台运行概况一览，快速管理自习室系统和学生账号。' : '维护楼栋、楼层、自习室座位排布，管理学生账号与预约状态。'} />
       {message && <div className="message">{message}</div>}
       {activeTab === 'home' && (
-        <AdminHomePage overview={overview} usage={usage} user={user} onNavigate={(tab) => setActiveTab(tab)} />
+        <AdminHomePage overview={overview} usage={usage} rooms={rooms} bookings={bookings} user={user} onNavigate={(tab) => setActiveTab(tab)} />
       )}
       {activeTab === 'overview' && (
         <OverviewPanel overview={overview} usage={usage} timeStats={timeStats} bookings={bookings} rooms={rooms} noShowStats={noShowStats} onRefresh={() => loadAdminData()} />
@@ -685,20 +702,20 @@ function OverviewPanel({ overview, usage, timeStats, bookings, rooms, noShowStat
   // 优先用 API 数据（有实际数据时），否则用本地计算的全量数据
   const displayStats = (timeStats && timeStats.some(t => t.count > 0)) ? timeStats : allTimeStats;
 
-  // 从全部预约计算各自习室使用率（排除已取消）
+  // 计算各自习室的预约占比（热门程度，全量非取消预约）
   const displayUsage = useMemo(() => {
     if (usage && usage.some(u => u.usageRate > 0)) return usage;
     if (!rooms || !bookings) return usage || [];
-    const hrs = (s, e) => { const [sh,sm]=s.split(':').map(Number); const [eh,em]=e.split(':').map(Number); return Math.max(0, (eh*60+em-(sh*60+sm))/60); };
     const active = bookings.filter(b => b.status !== 'CANCELLED');
+    const totalBookings = active.length;
     return rooms.map(room => {
-      const totalHrs = hrs(room.openTime || '08:00', room.closeTime || '22:00') * room.capacity;
-      const usedHrs = active.filter(b => b.roomId === room.id).reduce((sum, b) => sum + hrs(b.startTime || '08:00', b.endTime || '22:00'), 0);
-      const rate = totalHrs > 0 ? Math.round((usedHrs / totalHrs) * 100) : 0;
+      const roomCount = active.filter(b => b.roomId === room.id).length;
+      const rate = totalBookings > 0 ? Math.round((roomCount / totalBookings) * 100) : 0;
       return {
         roomId: room.id, roomName: room.name,
         buildingName: room.buildingName || '未分配楼栋', floorNumber: room.floorNumber || 1,
         usageRate: Math.min(100, rate),
+        bookingCount: roomCount,
       };
     });
   }, [usage, rooms, bookings]);
@@ -721,7 +738,7 @@ function OverviewPanel({ overview, usage, timeStats, bookings, rooms, noShowStat
         <LineChartPanel title="预约时段分布" items={displayStats} />
         <NoShowPiePanel title="违规情况" stats={noShowStats} bookings={bookings} />
       </div>
-      <HeatPanel title="自习室座位热力图" items={displayUsage} />
+      <HeatPanel title="自习室热门程度" items={displayUsage} />
     </div>
   );
 }
@@ -1217,31 +1234,114 @@ function MiniSeatGrid({ rows, columns }) {
   );
 }
 
+function UserEditModal({ user, onClose, onSaved, setMessage }) {
+  const [form, setForm] = useState({
+    username: user.username || '',
+    realName: user.realName || '',
+    role: user.role || 'STUDENT',
+    studentNo: user.studentNo || '',
+    className: user.className || '',
+    phone: user.phone || '',
+    enabled: user.enabled !== undefined ? user.enabled : true,
+    blacklisted: user.blacklisted || false,
+    violationCount: user.violationCount || 0,
+  });
+  const [saving, setSaving] = useState(false);
+
+  const handleChange = (field, value) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    if (!form.realName) {
+      setMessage('姓名不能为空');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api(`/users/${user.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          ...form,
+          enabled: Boolean(form.enabled),
+          blacklisted: Boolean(form.blacklisted),
+          violationCount: Number(form.violationCount),
+        })
+      });
+      setMessage('账号已保存');
+      onSaved();
+      onClose();
+    } catch (err) {
+      setMessage(err.message);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 500 }}>
+        <h3 className="modal-title">修改用户 — {user.realName}</h3>
+        <div className="form-grid" style={{ marginTop: 16 }}>
+          <label>昵称
+            <input value={form.username} disabled onChange={(e) => handleChange('username', e.target.value)} />
+          </label>
+          <label>姓名
+            <input value={form.realName} onChange={(e) => handleChange('realName', e.target.value)} required />
+          </label>
+          <label>角色
+            <select value={form.role} onChange={(e) => handleChange('role', e.target.value)}>
+              <option value="STUDENT">学生</option>
+              <option value="ADMIN">管理员</option>
+            </select>
+          </label>
+          <label>学号
+            <input value={form.studentNo} onChange={(e) => handleChange('studentNo', e.target.value)} />
+          </label>
+          <label>班级
+            <input value={form.className} onChange={(e) => handleChange('className', e.target.value)} />
+          </label>
+          <label>手机号
+            <input value={form.phone} onChange={(e) => handleChange('phone', e.target.value)} />
+          </label>
+          <label className="check-line">
+            <input type="checkbox" checked={Boolean(form.enabled)} onChange={(e) => handleChange('enabled', e.target.checked)} />
+            账号启用
+          </label>
+          <label className="check-line">
+            <input type="checkbox" checked={Boolean(form.blacklisted)} onChange={(e) => handleChange('blacklisted', e.target.checked)} />
+            黑名单
+          </label>
+          <label>违规次数
+            <input type="number" min="0" value={form.violationCount} onChange={(e) => handleChange('violationCount', e.target.value)} />
+          </label>
+        </div>
+        <div className="modal-actions" style={{ marginTop: 24, borderTop: '1px solid #e2eae7', paddingTop: 16 }}>
+          <button className="ghost-btn" onClick={onClose}>取消</button>
+          <button className="primary-btn" onClick={handleSave} disabled={saving}>
+            {saving ? '保存中...' : '保存修改'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function UserManager({ users, onChanged, setMessage }) {
   const emptyForm = { username: '', realName: '', role: 'STUDENT', studentNo: '', className: '', phone: '', enabled: true, blacklisted: false };
   const [form, setForm] = useState(emptyForm);
-  const [editing, setEditing] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
 
   const saveUser = async (event) => {
     event.preventDefault();
     try {
-      if (editing) {
-        await api(`/users/${editing.id}`, { method: 'PUT', body: JSON.stringify(form) });
-      } else {
-        await api('/users', { method: 'POST', body: JSON.stringify({ ...form, password: '123456' }) });
-      }
+      await api('/users', { method: 'POST', body: JSON.stringify({ ...form, password: '123456' }) });
       setForm(emptyForm);
-      setEditing(null);
       setMessage('用户已保存，初始密码为 123456');
       onChanged();
     } catch (err) {
       setMessage(err.message);
     }
-  };
-
-  const editUser = (target) => {
-    setEditing(target);
-    setForm({ ...emptyForm, ...target });
   };
 
   const resetPassword = async (id) => {
@@ -1269,9 +1369,9 @@ function UserManager({ users, onChanged, setMessage }) {
   return (
     <div className="stack">
       <section className="panel">
-        <h3>{editing ? '修改用户' : '新增用户'}</h3>
+        <h3>新增用户</h3>
         <form className="form-grid wide" onSubmit={saveUser}>
-          <label>昵称<input value={form.username} disabled={Boolean(editing)} onChange={(e) => setForm({ ...form, username: e.target.value })} required /></label>
+          <label>昵称<input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required /></label>
           <label>姓名<input value={form.realName} onChange={(e) => setForm({ ...form, realName: e.target.value })} required /></label>
           <label>角色
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
@@ -1283,8 +1383,7 @@ function UserManager({ users, onChanged, setMessage }) {
           <label>班级<input value={form.className || ''} onChange={(e) => setForm({ ...form, className: e.target.value })} /></label>
           <label>手机号<input value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
           <label className="check-line"><input type="checkbox" checked={Boolean(form.enabled)} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />账号启用</label>
-          <button className="primary-btn" type="submit">{editing ? '保存账号' : '新增账号'}</button>
-          {editing && <button type="button" className="ghost-btn" onClick={() => { setEditing(null); setForm(emptyForm); }}>取消修改</button>}
+          <button className="primary-btn" type="submit">新增账号</button>
         </form>
       </section>
       <section className="panel">
@@ -1298,7 +1397,7 @@ function UserManager({ users, onChanged, setMessage }) {
               <td>{target.className || '-'} {target.studentNo || ''}</td>
               <td>{target.blacklisted ? '黑名单' : target.enabled ? '正常' : '停用'} · 违规 {target.violationCount || 0} 次</td>
               <td className="table-actions">
-                <button type="button" onClick={() => editUser(target)}>修改</button>
+                <button type="button" onClick={() => setEditTarget(target)}>修改</button>
                 <button type="button" onClick={() => resetPassword(target.id)}>重置密码</button>
                 <button type="button" onClick={() => toggleBlacklist(target)}>{target.blacklisted ? '解除黑名单' : '加入黑名单'}</button>
                 <button type="button" className="danger" onClick={() => deleteUser(target.id)}>删除</button>
@@ -1307,6 +1406,14 @@ function UserManager({ users, onChanged, setMessage }) {
           ))}
         </DataTable>
       </section>
+      {editTarget && (
+        <UserEditModal
+          user={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={onChanged}
+          setMessage={setMessage}
+        />
+      )}
     </div>
   );
 }
@@ -1390,12 +1497,12 @@ function ReportsPanel({ reportDate, setReportDate, overview, usage, timeStats, b
   const displayStats = (timeStats && timeStats.some(t => t.count > 0)) ? timeStats : allTimeStats;
   const dailyTotal = displayStats.reduce((s, d) => s + (d.count || 0), 0);
 
-  // 从全部预约计算各自习室使用率（排除已取消）
+  // 从全部预约计算各自习室使用率（排除已取消，仅限所选日期）
   const displayUsage = useMemo(() => {
     if (usage && usage.some(u => u.usageRate > 0)) return usage;
     if (!rooms || !bookings) return usage || [];
     const hrs = (s, e) => { const [sh,sm]=s.split(':').map(Number); const [eh,em]=e.split(':').map(Number); return Math.max(0, (eh*60+em-(sh*60+sm))/60); };
-    const active = bookings.filter(b => b.status !== 'CANCELLED');
+    const active = bookings.filter(b => b.status !== 'CANCELLED' && b.bookingDate === reportDate);
     return rooms.map(room => {
       const totalHrs = hrs(room.openTime || '08:00', room.closeTime || '22:00') * room.capacity;
       const usedHrs = active.filter(b => b.roomId === room.id).reduce((sum, b) => sum + hrs(b.startTime || '08:00', b.endTime || '22:00'), 0);
@@ -1406,7 +1513,7 @@ function ReportsPanel({ reportDate, setReportDate, overview, usage, timeStats, b
         usageRate: Math.min(100, rate),
       };
     });
-  }, [usage, rooms, bookings]);
+  }, [usage, rooms, bookings, reportDate]);
 
   return (
     <div className="stack">
