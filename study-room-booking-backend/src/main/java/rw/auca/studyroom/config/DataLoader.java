@@ -5,7 +5,6 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 import rw.auca.studyroom.model.Building;
 import rw.auca.studyroom.model.Room;
-import rw.auca.studyroom.model.Seat;
 import rw.auca.studyroom.model.UserAccount;
 import rw.auca.studyroom.model.UserRole;
 import rw.auca.studyroom.repository.BuildingRepository;
@@ -60,15 +59,15 @@ public class DataLoader implements CommandLineRunner {
                 new Building("翔安校区", "学武楼", 1, "翔安校区学武楼负一楼自习室"));
 
             Room siming1f = roomService.createRoom(makeRoom("图书馆一层自习室", simingLib, 1, 4, 6));
-            Room siming2f = roomService.createRoom(makeRoom("图书馆二层自习室", simingLib, 2, 4, 6));
+            roomService.createRoom(makeRoom("图书馆二层自习室", simingLib, 2, 4, 6));
             Room siming3f = roomService.createRoom(makeRoom("图书馆三层静音区", simingLib, 3, 5, 8));
-            Room siming4f = roomService.createRoom(makeRoom("图书馆四层自习室", simingLib, 4, 4, 6));
+            roomService.createRoom(makeRoom("图书馆四层自习室", simingLib, 4, 4, 6));
 
             Room dewang2f = roomService.createRoom(makeRoom("德旺图书馆二层自习区", xiangAnDewang, 2, 5, 8));
-            Room dewang3f = roomService.createRoom(makeRoom("德旺图书馆三层自习区", xiangAnDewang, 3, 4, 6));
-            Room dewang4f = roomService.createRoom(makeRoom("德旺图书馆四层自习区", xiangAnDewang, 4, 4, 6));
+            roomService.createRoom(makeRoom("德旺图书馆三层自习区", xiangAnDewang, 3, 4, 6));
+            roomService.createRoom(makeRoom("德旺图书馆四层自习区", xiangAnDewang, 4, 4, 6));
             Room dewang5f = roomService.createRoom(makeRoom("德旺图书馆五层自习区", xiangAnDewang, 5, 5, 8));
-            Room dewang6f = roomService.createRoom(makeRoom("德旺图书馆六层自习区", xiangAnDewang, 6, 4, 6));
+            roomService.createRoom(makeRoom("德旺图书馆六层自习区", xiangAnDewang, 6, 4, 6));
 
             Room xuewuB1 = roomService.createRoom(makeRoom("学武楼负一楼自习室", xiangAnXuewu, -1, 6, 10));
 

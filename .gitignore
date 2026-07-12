@@ -12,10 +12,13 @@ study-room-booking-backend/mvnw.cmd
 # Frontend (Node/React)
 study-room-booking-frontend/node_modules/
 study-room-booking-frontend/build/
+study-room-booking-frontend/coverage/
 study-room-booking-frontend/.env.local
 study-room-booking-frontend/.env.development.local
 study-room-booking-frontend/.env.test.local
 study-room-booking-frontend/.env.production.local
+study-room-booking-frontend/.pnp
+study-room-booking-frontend/.pnp.js
 
 # IDE
 .idea/

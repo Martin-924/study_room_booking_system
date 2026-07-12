@@ -4,16 +4,13 @@
   "proxy": "http://localhost:8081",
   "private": true,
   "dependencies": {
-    "axios": "^1.6.7",
-    "lucide-react": "^1.23.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.0",
     "react-scripts": "5.0.1"
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "react-scripts build && node -e \"const fs=require('fs'); const path=require('path'); function rmDir(p){if(fs.existsSync(p)){fs.readdirSync(p).forEach(f=>{const cur=path.join(p,f);fs.lstatSync(cur).isDirectory()?rmDir(cur):fs.unlinkSync(cur)});fs.rmdirSync(p)}} const dest=path.join(__dirname,'..','study-room-booking-backend','src','main','resources','static'); rmDir(dest); function cpDir(src,dest){fs.mkdirSync(dest,{recursive:true});fs.readdirSync(src).forEach(f=>{const s=path.join(src,f);const d=path.join(dest,f);fs.lstatSync(s).isDirectory()?cpDir(s,d):fs.copyFileSync(s,d)})} cpDir(path.join(__dirname,'build'),dest); console.log('前端构建已同步到后端静态资源目录');\"",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

@@ -13,7 +13,6 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/bookings")
-@CrossOrigin(origins = "*")
 public class BookingController {
     
     @Autowired
@@ -46,12 +45,12 @@ public class BookingController {
         return new ResponseEntity<>(bookingService.getBookingsByUser(userId), HttpStatus.OK);
     }
     
-    @DeleteMapping("/{id}")
+    @PutMapping("/{id}/cancel")
     public ResponseEntity<?> cancelBooking(@PathVariable UUID id) {
         try {
             boolean deleted = bookingService.cancelBooking(id);
             if (deleted) {
-                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+                return ResponseEntity.ok("预约已取消");
             } else {
                 return new ResponseEntity<>(HttpStatus.NOT_FOUND);
             }
@@ -60,21 +59,8 @@ public class BookingController {
         }
     }
 
-    @PutMapping("/{id}/cancel")
-    public ResponseEntity<?> cancelBookingByPut(@PathVariable UUID id) {
-        try {
-            boolean deleted = bookingService.cancelBooking(id);
-            if (deleted) {
-                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-            } else {
-                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-            }
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        }
-    }
     
-    @PutMapping("/{bookingId}")
+    @PutMapping("/{bookingId}/release")
     public ResponseEntity<Booking> releaseBooking(@PathVariable UUID bookingId) {
         Booking updatedBooking = bookingService.releaseBooking(bookingId);
         if (updatedBooking != null) {
@@ -82,11 +68,6 @@ public class BookingController {
         } else {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
-    }
-
-    @PutMapping("/{bookingId}/release")
-    public ResponseEntity<Booking> releaseBookingExplicit(@PathVariable UUID bookingId) {
-        return releaseBooking(bookingId);
     }
 
     @PutMapping("/{bookingId}/check-in")

@@ -1,112 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
-
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:8081/api'
-  : '/api';
-
-const statusText = {
-  ACTIVE: '预约中',
-  RELEASED: '已释放',
-  CANCELLED: '已取消',
-  NO_SHOW: '违规'
-};
-
-const roleText = {
-  ADMIN: '管理员',
-  STUDENT: '学生'
-};
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function padTime(value) {
-  return String(value).padStart(2, '0');
-}
-
-function timeToMinutes(time) {
-  const [hours, minutes] = time.split(':').map(Number);
-  return hours * 60 + minutes;
-}
-
-function minutesToTime(totalMinutes) {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${padTime(hours)}:${padTime(minutes)}`;
-}
-
-function roundUpToStep(totalMinutes, step = 30) {
-  return Math.ceil(totalMinutes / step) * step;
-}
-
-function roundDownToStep(totalMinutes, step = 30) {
-  return Math.floor(totalMinutes / step) * step;
-}
-
-function buildTimeSlots(startMinutes, endMinutes, step = 30) {
-  const slots = [];
-  for (let minutes = startMinutes; minutes <= endMinutes; minutes += step) {
-    slots.push(minutesToTime(minutes));
-  }
-  return slots;
-}
-
-function getDefaultStartTime(room, bookingDate) {
-  if (!room) return '';
-  const openMinutes = timeToMinutes(room.openTime || '08:00');
-  const closeMinutes = timeToMinutes(room.closeTime || '22:00');
-  const latestStartMinutes = Math.max(openMinutes, closeMinutes - 30);
-
-  if (bookingDate === today()) {
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const roundedMinutes = roundUpToStep(currentMinutes, 30);
-    return minutesToTime(Math.min(Math.max(roundedMinutes, openMinutes), latestStartMinutes));
-  }
-
-  return minutesToTime(openMinutes);
-}
-
-function getDefaultEndTime(room, startTime) {
-  if (!room || !startTime) return '';
-  const closeMinutes = timeToMinutes(room.closeTime || '22:00');
-  const endMinutes = timeToMinutes(startTime) + 30;
-  if (endMinutes > closeMinutes) return '';
-  return minutesToTime(endMinutes);
-}
-
-function canCheckIn(booking) {
-  if (booking.bookingDate !== today()) return false;
-  if (!booking.startTime) return false;
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const [sh, sm] = booking.startTime.split(':').map(Number);
-  const startMin = sh * 60 + sm;
-  const deadlineMin = startMin + 30;
-  return nowMin >= startMin && nowMin < deadlineMin;
-}
-
-function floorLabel(floor) {
-  if (floor < 0) return 'B' + Math.abs(floor) + '层';
-  return floor + '层';
-}
-
-async function api(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options
-  });
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || '请求失败');
-  }
-  if (response.status === 204) {
-    return null;
-  }
-  const contentType = response.headers.get('content-type') || '';
-  return contentType.includes('application/json') ? response.json() : response.text();
-}
+import { api } from './utils/api';
+import {
+  today, timeToMinutes, minutesToTime, roundUpToStep, roundDownToStep,
+  buildTimeSlots, getDefaultStartTime, getDefaultEndTime,
+  canCheckIn, floorLabel
+} from './utils/timeUtils';
+import { statusText, roleText, SETTINGS_LABELS, SETTINGS_DESC, DEFAULT_SETTINGS } from './utils/constants';
+import { useTimeStats } from './utils/hooks';
 
 // ======== 视频资源场景配置 ========
 const SCENES = [
@@ -827,29 +728,7 @@ function Header({ title, subtitle }) {
 }
 
 function OverviewPanel({ overview, usage, timeStats, bookings, rooms, noShowStats, onRefresh }) {
-  // 从全部预约计算时段分布（排除已取消，含已释放等全部状态）
-  const allTimeStats = useMemo(() => {
-    const slots = [
-      { label: '08:00', range: [8, 10], count: 0 },
-      { label: '10:00', range: [10, 12], count: 0 },
-      { label: '14:00', range: [14, 16], count: 0 },
-      { label: '16:00', range: [16, 18], count: 0 },
-      { label: '19:00', range: [19, 21], count: 0 },
-    ];
-    if (bookings && bookings.length > 0) {
-      bookings.forEach(b => {
-        if (b.status === 'CANCELLED') return;
-        if (!b.startTime) return;
-        const h = parseInt(b.startTime.split(':')[0], 10);
-        slots.forEach(s => {
-          if (h >= s.range[0] && h < s.range[1]) s.count++;
-        });
-      });
-    }
-    return slots.map(s => ({ label: s.label, count: s.count }));
-  }, [bookings]);
-
-  // 优先用 API 数据（有实际数据时），否则用本地计算的全量数据
+  const allTimeStats = useTimeStats(bookings);
   const displayStats = (timeStats && timeStats.some(t => t.count > 0)) ? timeStats : allTimeStats;
 
   // 计算各自习室的预约占比（热门程度，全量非取消预约）
@@ -1376,10 +1255,10 @@ function RoomManager({ buildings, rooms, onChanged, setMessage }) {
 }
 
 function MiniSeatGrid({ rows, columns }) {
-  const cells = Array.from({ length: Math.max(1, rows * columns) });
+  const count = Math.max(1, rows * columns);
   return (
     <div className="mini-seat-grid" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
-      {cells.map((_, index) => <span key={index} />)}
+      {Array(count).fill(null).map((_, index) => <span key={index} />)}
     </div>
   );
 }
@@ -1621,30 +1500,7 @@ function AdminBookingPanel({ bookings, rooms, onChanged, setMessage }) {
 }
 
 function ReportsPanel({ reportDate, setReportDate, overview, usage, timeStats, bookings, rooms, onLoad }) {
-  // 从预约数据计算时段分布（排除已取消，含已释放等全部状态）
-  const allTimeStats = useMemo(() => {
-    const slots = [
-      { label: '08:00', range: [8, 10], count: 0 },
-      { label: '10:00', range: [10, 12], count: 0 },
-      { label: '14:00', range: [14, 16], count: 0 },
-      { label: '16:00', range: [16, 18], count: 0 },
-      { label: '19:00', range: [19, 21], count: 0 },
-    ];
-    if (bookings && bookings.length > 0) {
-      const today = reportDate;
-      bookings.forEach(b => {
-        if (b.status === 'CANCELLED') return;
-        if (b.bookingDate !== today) return;
-        if (!b.startTime) return;
-        const h = parseInt(b.startTime.split(':')[0], 10);
-        slots.forEach(s => {
-          if (h >= s.range[0] && h < s.range[1]) s.count++;
-        });
-      });
-    }
-    return slots.map(s => ({ label: s.label, count: s.count }));
-  }, [bookings, reportDate]);
-
+  const allTimeStats = useTimeStats(bookings, reportDate);
   const displayStats = (timeStats && timeStats.some(t => t.count > 0)) ? timeStats : allTimeStats;
   const dailyTotal = displayStats.reduce((s, d) => s + (d.count || 0), 0);
 
@@ -1686,31 +1542,7 @@ function ReportsPanel({ reportDate, setReportDate, overview, usage, timeStats, b
   );
 }
 
-const SETTINGS_LABELS = {
-  max_bookings_per_day: '单日最大预约次数',
-  check_in_window_minutes: '签到窗口（分钟）',
-  violation_blacklist_threshold: '违规黑名单阈值（次）',
-  no_show_grace_minutes: '未签到违规时间（分钟）',
-  checkout_grace_minutes: '未签退违规时间（分钟）'
-};
-
-const SETTINGS_DESC = {
-  max_bookings_per_day: '每个学生每天最多可预约的次数',
-  check_in_window_minutes: '预约开始后多少分钟内可以签到',
-  violation_blacklist_threshold: '违规累计达到多少次后自动加入黑名单',
-  no_show_grace_minutes: '超过开始时间多少分钟未签到视为违规',
-  checkout_grace_minutes: '超过结束时间多少分钟未签退视为违规'
-};
-
 function SettingsPanel({ settings, onReload, setMessage }) {
-  const DEFAULT_SETTINGS = {
-    max_bookings_per_day: 3,
-    check_in_window_minutes: 30,
-    violation_blacklist_threshold: 3,
-    no_show_grace_minutes: 30,
-    checkout_grace_minutes: 30
-  };
-
   const [form, setForm] = useState(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -2218,7 +2050,7 @@ function BookingSuccessModal({ visible, booking, onClose }) {
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 const DEEPSEEK_MODEL = 'deepseek-chat';
-const DEEPSEEK_API_KEY = ''; // ⚡ 请在这里填写你的 DeepSeek API Key
+const DEEPSEEK_API_KEY = process.env.REACT_APP_DEEPSEEK_API_KEY || '';
 
 function buildSystemPrompt(buildings, rooms) {
   const campuses = [...new Set(buildings.map(b => b.campus).filter(Boolean))];

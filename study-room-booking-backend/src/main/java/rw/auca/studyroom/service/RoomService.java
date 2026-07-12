@@ -10,8 +10,8 @@ import rw.auca.studyroom.repository.BookingRepository;
 import rw.auca.studyroom.repository.BuildingRepository;
 import rw.auca.studyroom.repository.RoomRepository;
 import rw.auca.studyroom.repository.SeatRepository;
+import rw.auca.studyroom.util.TimeUtils;
 
-import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -102,7 +102,7 @@ public class RoomService {
 
             String status = Boolean.TRUE.equals(seat.getEnabled()) ? "AVAILABLE" : "DISABLED";
             for (Booking booking : activeBookings) {
-                if (seat.getId().equals(booking.getSeatId()) && timesOverlap(startTime, endTime, booking.getStartTime(), booking.getEndTime())) {
+                if (seat.getId().equals(booking.getSeatId()) && TimeUtils.timesOverlap(startTime, endTime, booking.getStartTime(), booking.getEndTime())) {
                     status = "OCCUPIED";
                     view.put("bookingId", booking.getId());
                     view.put("studentName", booking.getStudentName());
@@ -125,7 +125,7 @@ public class RoomService {
     }
 
     public List<Map<String, Object>> getAllSeats(UUID roomId) {
-        Room room = roomRepository.findById(roomId)
+        roomRepository.findById(roomId)
             .orElseThrow(() -> new RuntimeException("自习室不存在"));
         List<Seat> seats = seatRepository.findByRoomIdOrderByRowIndexAscColumnIndexAsc(roomId);
         List<Map<String, Object>> result = new ArrayList<>();
@@ -229,14 +229,4 @@ public class RoomService {
         }
     }
 
-    private boolean timesOverlap(String startA, String endA, String startB, String endB) {
-        if (startA == null || endA == null || startB == null || endB == null) {
-            return false;
-        }
-        LocalTime aStart = LocalTime.parse(startA);
-        LocalTime aEnd = LocalTime.parse(endA);
-        LocalTime bStart = LocalTime.parse(startB);
-        LocalTime bEnd = LocalTime.parse(endB);
-        return aStart.isBefore(bEnd) && bStart.isBefore(aEnd);
-    }
 }

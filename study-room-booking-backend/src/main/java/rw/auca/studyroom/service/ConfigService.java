@@ -37,11 +37,11 @@ public class ConfigService {
             result.put(c.getConfigKey(), c.getConfigValue());
         }
         // 保证默认值存在
-        putIfAbsent(result, "max_bookings_per_day", "3");
-        putIfAbsent(result, "check_in_window_minutes", "30");
-        putIfAbsent(result, "violation_blacklist_threshold", "3");
-        putIfAbsent(result, "no_show_grace_minutes", "30");
-        putIfAbsent(result, "checkout_grace_minutes", "30");
+        result.putIfAbsent("max_bookings_per_day", "3");
+        result.putIfAbsent("check_in_window_minutes", "30");
+        result.putIfAbsent("violation_blacklist_threshold", "3");
+        result.putIfAbsent("no_show_grace_minutes", "30");
+        result.putIfAbsent("checkout_grace_minutes", "30");
         return result;
     }
 
@@ -60,9 +60,4 @@ public class ConfigService {
         }
     }
 
-    private void putIfAbsent(Map<String, Object> map, String key, String defaultValue) {
-        if (!map.containsKey(key)) {
-            map.put(key, defaultValue);
-        }
-    }
 }

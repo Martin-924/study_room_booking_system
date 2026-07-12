@@ -11,6 +11,7 @@ import rw.auca.studyroom.repository.BookingRepository;
 import rw.auca.studyroom.repository.RoomRepository;
 import rw.auca.studyroom.repository.SeatRepository;
 import rw.auca.studyroom.repository.UserAccountRepository;
+import rw.auca.studyroom.util.TimeUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -19,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.scheduling.annotation.Scheduled;
 
 @Service
 public class BookingService {
@@ -51,11 +54,8 @@ public class BookingService {
         return bookingRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
     
-    public Booking createBooking(Booking booking) {
-        return createBookingFromEntity(booking);
-    }
-
     public Booking createBooking(Map<String, String> request) {
+        releaseExpiredBookings();
         Booking booking = new Booking();
         booking.setUserId(UUID.fromString(request.get("userId")));
         booking.setRoomId(UUID.fromString(request.get("roomId")));
@@ -63,11 +63,6 @@ public class BookingService {
         booking.setBookingDate(request.get("bookingDate"));
         booking.setStartTime(request.get("startTime"));
         booking.setEndTime(request.get("endTime"));
-        return createBookingFromEntity(booking);
-    }
-
-    public Booking createBookingFromEntity(Booking booking) {
-        releaseExpiredBookings();
         UserAccount user = userAccountRepository.findById(booking.getUserId())
             .orElseThrow(() -> new RuntimeException("账号不存在"));
         if (user.getRole() != UserRole.STUDENT) {
@@ -108,7 +103,7 @@ public class BookingService {
                 booking.getSeatId(), booking.getBookingDate(), "ACTIVE"
             );
             for (Booking existing : existingBookings) {
-                if (timesOverlap(booking.getStartTime(), booking.getEndTime(), existing.getStartTime(), existing.getEndTime())) {
+                if (TimeUtils.timesOverlap(booking.getStartTime(), booking.getEndTime(), existing.getStartTime(), existing.getEndTime())) {
                     throw new RuntimeException("该座位在所选时间段已被预约");
                 }
             }
@@ -232,6 +227,7 @@ public class BookingService {
         return booking;
     }
 
+    @Scheduled(fixedRate = 60_000)
     public void releaseExpiredBookings() {
         List<Booking> activeBookings = bookingRepository.findByStatus("ACTIVE");
         LocalDateTime now = LocalDateTime.now();
@@ -316,14 +312,4 @@ public class BookingService {
         }
     }
 
-    private boolean timesOverlap(String startA, String endA, String startB, String endB) {
-        if (startA == null || endA == null || startB == null || endB == null) {
-            return false;
-        }
-        LocalTime aStart = LocalTime.parse(startA);
-        LocalTime aEnd = LocalTime.parse(endA);
-        LocalTime bStart = LocalTime.parse(startB);
-        LocalTime bEnd = LocalTime.parse(endB);
-        return aStart.isBefore(bEnd) && bStart.isBefore(aEnd);
-    }
 }
