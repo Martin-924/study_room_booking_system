@@ -21,6 +21,61 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function padTime(value) {
+  return String(value).padStart(2, '0');
+}
+
+function timeToMinutes(time) {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+function minutesToTime(totalMinutes) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${padTime(hours)}:${padTime(minutes)}`;
+}
+
+function roundUpToStep(totalMinutes, step = 30) {
+  return Math.ceil(totalMinutes / step) * step;
+}
+
+function roundDownToStep(totalMinutes, step = 30) {
+  return Math.floor(totalMinutes / step) * step;
+}
+
+function buildTimeSlots(startMinutes, endMinutes, step = 30) {
+  const slots = [];
+  for (let minutes = startMinutes; minutes <= endMinutes; minutes += step) {
+    slots.push(minutesToTime(minutes));
+  }
+  return slots;
+}
+
+function getDefaultStartTime(room, bookingDate) {
+  if (!room) return '';
+  const openMinutes = timeToMinutes(room.openTime || '08:00');
+  const closeMinutes = timeToMinutes(room.closeTime || '22:00');
+  const latestStartMinutes = Math.max(openMinutes, closeMinutes - 30);
+
+  if (bookingDate === today()) {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const roundedMinutes = roundUpToStep(currentMinutes, 30);
+    return minutesToTime(Math.min(Math.max(roundedMinutes, openMinutes), latestStartMinutes));
+  }
+
+  return minutesToTime(openMinutes);
+}
+
+function getDefaultEndTime(room, startTime) {
+  if (!room || !startTime) return '';
+  const closeMinutes = timeToMinutes(room.closeTime || '22:00');
+  const endMinutes = timeToMinutes(startTime) + 30;
+  if (endMinutes > closeMinutes) return '';
+  return minutesToTime(endMinutes);
+}
+
 function canCheckIn(booking) {
   if (booking.bookingDate !== today()) return false;
   if (!booking.startTime) return false;
@@ -1880,6 +1935,7 @@ function ReservationPanel({ user, buildings, rooms, onChanged, setMessage }) {
   const [seatMap, setSeatMap] = useState(null);
   const [selectedSeat, setSelectedSeat] = useState(null);
   const [timeError, setTimeError] = useState('');
+  const [bookingSuccess, setBookingSuccess] = useState(null);
 
   const campuses = Array.from(new Set(buildings.map((building) => building.campus).filter(Boolean)));
   const buildingOptions = buildings.filter((building) => !filters.campus || building.campus === filters.campus);
@@ -1897,8 +1953,82 @@ function ReservationPanel({ user, buildings, rooms, onChanged, setMessage }) {
       && (!filters.floorNumber || String(room.floorNumber || 1) === String(filters.floorNumber));
   });
   const currentRoom = rooms.find((room) => room.id === filters.roomId);
-  const startTime = filters.startTime || (currentRoom ? currentRoom.openTime : '');
-  const endTime = filters.endTime || (currentRoom ? currentRoom.closeTime : '');
+  const timeRoom = currentRoom || roomOptions[0] || rooms[0] || null;
+  const roomOpenMinutes = timeRoom ? timeToMinutes(timeRoom.openTime || '08:00') : 0;
+  const roomCloseMinutes = timeRoom ? timeToMinutes(timeRoom.closeTime || '22:00') : 0;
+  const startTimeOptions = useMemo(() => {
+    if (!timeRoom) return [];
+    const todayStartMinutes = filters.date === today()
+      ? Math.max(roomOpenMinutes, roundDownToStep(new Date().getHours() * 60 + new Date().getMinutes(), 30))
+      : roomOpenMinutes;
+    return buildTimeSlots(todayStartMinutes, Math.max(todayStartMinutes, roomCloseMinutes - 30), 30);
+  }, [timeRoom, roomOpenMinutes, roomCloseMinutes, filters.date]);
+  const endTimeOptions = useMemo(() => {
+    if (!timeRoom || !filters.startTime) return [];
+    return buildTimeSlots(timeToMinutes(filters.startTime) + 30, roomCloseMinutes, 30);
+  }, [timeRoom, filters.startTime, roomCloseMinutes]);
+  const startTime = filters.startTime || (timeRoom ? getDefaultStartTime(timeRoom, filters.date) : '');
+  const endTime = filters.endTime || (timeRoom ? getDefaultEndTime(timeRoom, startTime) : '');
+
+  useEffect(() => {
+    if (!timeRoom) {
+      if (filters.startTime || filters.endTime) {
+        setFilters((prev) => ({ ...prev, startTime: '', endTime: '' }));
+      }
+      return;
+    }
+
+    const defaultStartTime = getDefaultStartTime(timeRoom, filters.date);
+
+    setFilters((prev) => {
+      const nextStartTime = prev.startTime && startTimeOptions.includes(prev.startTime)
+        ? prev.startTime
+        : defaultStartTime;
+      const nextEndOptions = buildTimeSlots(timeToMinutes(nextStartTime) + 30, roomCloseMinutes, 30);
+      const nextEndTime = prev.endTime && nextEndOptions.includes(prev.endTime)
+        ? prev.endTime
+        : getDefaultEndTime(timeRoom, nextStartTime);
+
+      if (prev.startTime === nextStartTime && prev.endTime === nextEndTime) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        startTime: nextStartTime,
+        endTime: nextEndTime
+      };
+    });
+  }, [timeRoom, filters.date, filters.startTime, filters.endTime, roomCloseMinutes, startTimeOptions]);
+
+  useEffect(() => {
+    if (!timeRoom || !filters.startTime) {
+      return;
+    }
+
+    const nextEndOptions = buildTimeSlots(timeToMinutes(filters.startTime) + 30, roomCloseMinutes, 30);
+    if (!nextEndOptions.length) {
+      if (filters.endTime) {
+        setFilters((prev) => ({ ...prev, endTime: '' }));
+      }
+      return;
+    }
+
+    setFilters((prev) => {
+      const nextEndTime = prev.endTime && nextEndOptions.includes(prev.endTime)
+        ? prev.endTime
+        : nextEndOptions[0];
+
+      if (prev.endTime === nextEndTime) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        endTime: nextEndTime
+      };
+    });
+  }, [timeRoom, filters.startTime, filters.endTime, roomCloseMinutes, endTimeOptions]);
 
   useEffect(() => {
     if (!startTime || !endTime) {
@@ -1916,10 +2046,11 @@ function ReservationPanel({ user, buildings, rooms, onChanged, setMessage }) {
     if (filters.date === today()) {
       const now = new Date();
       const nowMin = now.getHours() * 60 + now.getMinutes();
+      const earliestStartMin = Math.max(roomOpenMinutes, roundDownToStep(nowMin, 30));
       const [sh, sm] = startTime.split(':').map(Number);
       const startMin = sh * 60 + sm;
-      if (nowMin >= startMin) {
-        setTimeError('开始时间不能早于当前时间');
+      if (startMin < earliestStartMin) {
+        setTimeError(`开始时间不能早于 ${minutesToTime(earliestStartMin)}`);
         return;
       }
     }
@@ -1962,6 +2093,13 @@ function ReservationPanel({ user, buildings, rooms, onChanged, setMessage }) {
       });
       setMessage('预约成功');
       window.dispatchEvent(new Event('notif-refresh'));
+      setBookingSuccess({
+        roomName: currentRoom?.name || '自习室',
+        seatNo: selectedSeat.seatNo,
+        bookingDate: filters.date,
+        startTime,
+        endTime
+      });
       onChanged();
       const latestMap = await api(`/rooms/${filters.roomId}/seats?date=${filters.date}&startTime=${startTime}&endTime=${endTime}`);
       setSeatMap(latestMap);
@@ -2005,9 +2143,26 @@ function ReservationPanel({ user, buildings, rooms, onChanged, setMessage }) {
           <label>日期<input type="date" min={today()} value={filters.date} onChange={(e) => setFilters({ ...filters, date: e.target.value })} /></label>
           <label className="time-range-label">时间段
             <div className="time-range-input">
-              <input type="time" value={filters.startTime} onChange={(e) => setFilters({ ...filters, startTime: e.target.value })} />
+              <select
+                value={filters.startTime}
+                onChange={(e) => setFilters({ ...filters, startTime: e.target.value })}
+              >
+                <option value="">选择开始时间</option>
+                {startTimeOptions.map((time) => (
+                  <option key={time} value={time}>{time}</option>
+                ))}
+              </select>
               <span>至</span>
-              <input type="time" value={filters.endTime} onChange={(e) => setFilters({ ...filters, endTime: e.target.value })} />
+              <select
+                value={filters.endTime}
+                onChange={(e) => setFilters({ ...filters, endTime: e.target.value })}
+                disabled={!filters.startTime || !endTimeOptions.length}
+              >
+                <option value="">选择结束时间</option>
+                {endTimeOptions.map((time) => (
+                  <option key={time} value={time}>{time}</option>
+                ))}
+              </select>
             </div>
           </label>
         </div>
@@ -2028,6 +2183,29 @@ function ReservationPanel({ user, buildings, rooms, onChanged, setMessage }) {
           <div className="empty-state">选择条件后展示座位图</div>
         )}
       </section>
+      <BookingSuccessModal
+        visible={!!bookingSuccess}
+        booking={bookingSuccess}
+        onClose={() => setBookingSuccess(null)}
+      />
+    </div>
+  );
+}
+
+function BookingSuccessModal({ visible, booking, onClose }) {
+  if (!visible || !booking) return null;
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card booking-success-card" onClick={(e) => e.stopPropagation()}>
+        <div className="booking-success-badge">预约成功</div>
+        <h3 className="modal-title">座位已预订</h3>
+        <p className="modal-message">
+          {booking.bookingDate} {booking.startTime}-{booking.endTime} · {booking.roomName} · {booking.seatNo}
+        </p>
+        <div className="modal-actions">
+          <button className="primary-btn" onClick={onClose}>知道了</button>
+        </div>
+      </div>
     </div>
   );
 }

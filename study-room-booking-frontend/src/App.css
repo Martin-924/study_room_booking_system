@@ -878,7 +878,8 @@ td small {
   gap: 6px;
 }
 
-.time-range-input input {
+.time-range-input input,
+.time-range-input select {
   flex: 1;
   min-width: 0;
 }
@@ -948,6 +949,23 @@ td small {
 
 .modal-actions .danger:hover {
   background: #a83225 !important;
+}
+
+.booking-success-card .modal-title {
+  color: #166f5d;
+}
+
+.booking-success-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  border-radius: 9999px;
+  background: #e8f5ef;
+  color: #166f5d;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 /* ========== 自习室编辑弹窗 ========== */
