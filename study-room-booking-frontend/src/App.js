@@ -715,13 +715,13 @@ function AdminDashboard({ user, onLogout }) {
 
   const tabs = [
     { key: 'home', label: '首页', icon: '🏠' },
-    { key: 'overview', label: '实时看板', icon: '▦' },
-    { key: 'rooms', label: '自习室管理', icon: '□' },
-    { key: 'users', label: '账号管理', icon: '人' },
-    { key: 'bookings', label: '预约管控', icon: '时' },
-    { key: 'reports', label: '数据报表', icon: '图' },
-    { key: 'settings', label: '系统设置', icon: '设' }
-  ];
+    { key: 'overview', label: '实时看板', icon: '📊' },
+    { key: 'rooms', label: '自习室管理', icon: '🚪' },
+    { key: 'users', label: '账号管理', icon: '👥' },
+    { key: 'bookings', label: '预约管控', icon: '📅' },
+    { key: 'reports', label: '数据报表', icon: '📈' },
+    { key: 'settings', label: '系统设置', icon: '⚙️' }
+];
 
   return (
     <Shell user={user} onLogout={onLogout} tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab}>
@@ -1841,10 +1841,10 @@ function StudentDashboard({ user, onLogout, onUserUpdate }) {
 
   const tabs = [
     { key: 'home', label: '首页', icon: '🏠' },
-    { key: 'reserve', label: '预约选座', icon: '座' },
-    { key: 'mine', label: '我的预约', icon: '单' },
-    { key: 'profile', label: '个人中心', icon: '密' }
-  ];
+    { key: 'reserve', label: '预约选座', icon: '💺' },
+    { key: 'mine', label: '我的预约', icon: '📋' },
+    { key: 'profile', label: '个人中心', icon: '👤' }
+];
 
   return (
     <Shell user={user} onLogout={onLogout} tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab}>
