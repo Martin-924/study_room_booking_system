@@ -37,6 +37,9 @@ public class BookingService {
 
     @Autowired
     private ConfigService configService;
+
+    @Autowired
+    private NotificationService notificationService;
     
     public List<Booking> getAllBookings() {
         releaseExpiredBookings();
@@ -118,7 +121,12 @@ public class BookingService {
             booking.setReleased(false);
             booking.setCheckedIn(false);
             booking.setCreatedAt(LocalDateTime.now());
-            return bookingRepository.save(booking);
+            Booking saved = bookingRepository.save(booking);
+            // 发送预约成功通知
+            notificationService.createNotification(user.getId(), "BOOKING_SUCCESS", "预约成功",
+                "您在 " + booking.getBookingDate() + " " + booking.getStartTime() + "-" + booking.getEndTime()
+                + " 的预约已成功创建，自习室：" + room.getName() + "，座位：" + booking.getSeatNo());
+            return saved;
         }
         throw new RuntimeException("自习室不存在");
     }
@@ -133,6 +141,13 @@ public class BookingService {
             booking.setStatus("CANCELLED");
             booking.setReleased(true);
             bookingRepository.save(booking);
+            if (booking.getUserId() != null) {
+                userAccountRepository.findById(booking.getUserId()).ifPresent(user -> {
+                    notificationService.createNotification(user.getId(), "BOOKING_SUCCESS", "预约已取消",
+                        "您的预约（" + (booking.getBookingDate() == null ? "" : booking.getBookingDate())
+                        + " " + (booking.getStartTime() == null ? "" : booking.getStartTime() + "-" + (booking.getEndTime() == null ? "" : booking.getEndTime())) + "）已取消。");
+                });
+            }
             return true;
         }
         return false;
@@ -145,6 +160,13 @@ public class BookingService {
             booking.setReleased(true);
             booking.setStatus("RELEASED");
             Booking updatedBooking = bookingRepository.save(booking);
+            if (booking.getUserId() != null) {
+                userAccountRepository.findById(booking.getUserId()).ifPresent(user -> {
+                    notificationService.createNotification(user.getId(), "BOOKING_SUCCESS", "预约已释放",
+                        "管理员已释放您的预约（" + (booking.getBookingDate() == null ? "" : booking.getBookingDate())
+                        + " " + (booking.getStartTime() == null ? "" : booking.getStartTime() + "-" + (booking.getEndTime() == null ? "" : booking.getEndTime())) + "）。");
+                });
+            }
             return updatedBooking;
         }
         return null;
@@ -192,7 +214,15 @@ public class BookingService {
         }
         booking.setReleased(true);
         booking.setStatus("RELEASED");
-        return bookingRepository.save(booking);
+        Booking saved = bookingRepository.save(booking);
+        if (booking.getUserId() != null) {
+            userAccountRepository.findById(booking.getUserId()).ifPresent(user -> {
+                notificationService.createNotification(user.getId(), "BOOKING_SUCCESS", "签退成功",
+                    "您已成功签退（" + (booking.getBookingDate() == null ? "" : booking.getBookingDate())
+                    + " " + (booking.getStartTime() == null ? "" : booking.getStartTime() + "-" + (booking.getEndTime() == null ? "" : booking.getEndTime())) + "）。");
+            });
+        }
+        return saved;
     }
 
     public Booking markNoShow(UUID bookingId) {
@@ -229,6 +259,24 @@ public class BookingService {
                     markNoShowAndSave(booking);
                 }
             }
+
+            // Type 3: 预约即将开始（1小时内）→ 发送提醒通知（仅一次）
+            if (!Boolean.TRUE.equals(booking.getReminderSent())
+                    && !Boolean.TRUE.equals(booking.getCheckedIn())
+                    && "ACTIVE".equals(booking.getStatus())) {
+                LocalDateTime remindAt = startAt.minusHours(1);
+                if (remindAt.isBefore(now) && startAt.isAfter(now)) {
+                    booking.setReminderSent(true);
+                    bookingRepository.save(booking);
+                    if (booking.getUserId() != null) {
+                        Optional<Room> roomOpt = roomRepository.findById(booking.getRoomId());
+                        String roomName = roomOpt.map(Room::getName).orElse("自习室");
+                        notificationService.createNotification(booking.getUserId(), "BOOKING_REMINDER", "预约即将开始",
+                            "您的预约 " + booking.getBookingDate() + " " + booking.getStartTime() + "-" + booking.getEndTime()
+                            + " 即将开始（" + roomName + " · " + (booking.getSeatNo() == null ? "" : booking.getSeatNo()) + "），请及时签到。");
+                    }
+                }
+            }
         }
     }
 
@@ -244,6 +292,11 @@ public class BookingService {
                     user.setBlacklisted(true);
                 }
                 userAccountRepository.save(user);
+                // 发送违规通知
+                String reason = Boolean.TRUE.equals(booking.getCheckedIn()) ? "未按时签退" : "未按时签到";
+                notificationService.createNotification(user.getId(), "VIOLATION_WARNING", "违规记录",
+                    "您因" + reason + "已被记录违规（" + booking.getBookingDate() + " " + booking.getStartTime() + "-" + booking.getEndTime()
+                    + "），当前违规次数：" + user.getViolationCount() + "次");
             });
         }
     }

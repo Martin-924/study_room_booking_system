@@ -448,6 +448,59 @@ function LoginPage({ onLogin }) {
 
 // ======== 仪表盘外壳 ========
 function Shell({ user, onLogout, tabs, activeTab, setActiveTab, children }) {
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotif, setShowNotif] = useState(false);
+
+  const loadNotifications = useCallback(async () => {
+    if (!user) return;
+    try {
+      const [list, cnt] = await Promise.all([
+        api(`/notifications/${user.id}`),
+        api(`/notifications/${user.id}/unread-count`)
+      ]);
+      setNotifications(list);
+      setUnreadCount(cnt.count);
+    } catch (_) {}
+  }, [user]);
+
+  useEffect(() => {
+    loadNotifications();
+    const timer = setInterval(loadNotifications, 10000);
+
+    const onRefresh = () => loadNotifications();
+    window.addEventListener('notif-refresh', onRefresh);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('notif-refresh', onRefresh);
+    };
+  }, [loadNotifications]);
+
+  const markAllRead = async () => {
+    try {
+      await api(`/notifications/${user.id}/read-all`, { method: 'PUT' });
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch (_) {}
+  };
+
+  const markOneRead = async (id) => {
+    try {
+      await api(`/notifications/${id}/read`, { method: 'PUT' });
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (_) {}
+  };
+
+  // 点击外部关闭下拉
+  useEffect(() => {
+    if (!showNotif) return;
+    const handler = () => setShowNotif(false);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [showNotif]);
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -472,6 +525,48 @@ function Shell({ user, onLogout, tabs, activeTab, setActiveTab, children }) {
           ))}
         </nav>
         <div className="user-card">
+          <div className="notif-area">
+            <button
+              type="button"
+              className="notif-bell"
+              onClick={(e) => { e.stopPropagation(); setShowNotif(!showNotif); }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              {unreadCount > 0 && <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+            </button>
+            {showNotif && (
+              <div className="notif-dropdown" onClick={(e) => e.stopPropagation()}>
+                <div className="notif-dropdown-header">
+                  <strong>通知</strong>
+                  {unreadCount > 0 && <button type="button" className="notif-mark-read" onClick={markAllRead}>全部已读</button>}
+                </div>
+                <div className="notif-dropdown-body">
+                  {notifications.length === 0 ? (
+                    <div className="notif-empty">暂无通知</div>
+                  ) : (
+                    notifications.map(n => (
+                      <div key={n.id} className={`notif-item ${n.read ? '' : 'notif-unread'}`}
+                        onClick={() => !n.read && markOneRead(n.id)}>
+                        <div className="notif-icon">
+                          {n.type === 'BOOKING_SUCCESS' && '✅'}
+                          {n.type === 'BOOKING_REMINDER' && '⏰'}
+                          {n.type === 'VIOLATION_WARNING' && '⚠️'}
+                        </div>
+                        <div className="notif-content">
+                          <div className="notif-title">{n.title}</div>
+                          <div className="notif-msg">{n.message}</div>
+                          <div className="notif-time">{n.createdAt?.slice(0, 16)?.replace('T', ' ')}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <span>{roleText[user.role]}</span>
           <strong style={{ color: '#173d3a' }}>{user.realName}</strong>
           <small style={{ color: '#5a7a74' }}>{user.username}</small>
@@ -1425,6 +1520,7 @@ function AdminBookingPanel({ bookings, rooms, onChanged, setMessage }) {
     try {
       await api(`/bookings/${id}/${action}`, { method: 'PUT' });
       setMessage(successMessage);
+      window.dispatchEvent(new Event('notif-refresh'));
       onChanged();
     } catch (err) {
       setMessage(err.message);
@@ -1865,6 +1961,7 @@ function ReservationPanel({ user, buildings, rooms, onChanged, setMessage }) {
         })
       });
       setMessage('预约成功');
+      window.dispatchEvent(new Event('notif-refresh'));
       onChanged();
       const latestMap = await api(`/rooms/${filters.roomId}/seats?date=${filters.date}&startTime=${startTime}&endTime=${endTime}`);
       setSeatMap(latestMap);
@@ -1996,6 +2093,7 @@ function StudentBookingPanel({ bookings, rooms, onChanged, setMessage }) {
     try {
       await api(`/bookings/${booking.id}/${actionMap[type]}`, { method: 'PUT' });
       setMessage(msgMap[type]);
+      window.dispatchEvent(new Event('notif-refresh'));
       onChanged();
     } catch (err) {
       setMessage(err.message);

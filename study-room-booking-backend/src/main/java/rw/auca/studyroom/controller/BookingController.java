@@ -62,7 +62,16 @@ public class BookingController {
 
     @PutMapping("/{id}/cancel")
     public ResponseEntity<?> cancelBookingByPut(@PathVariable UUID id) {
-        return cancelBooking(id);
+        try {
+            boolean deleted = bookingService.cancelBooking(id);
+            if (deleted) {
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            } else {
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            }
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
     }
     
     @PutMapping("/{bookingId}")

@@ -42,6 +42,8 @@ public class Booking {
     @Column(nullable = false)
     private Boolean checkedIn = false;
 
+    private Boolean reminderSent = false;
+
     @Column(nullable = false)
     private String status = "ACTIVE";
 
@@ -159,6 +161,14 @@ public class Booking {
 
     public void setCheckedIn(Boolean checkedIn) {
         this.checkedIn = checkedIn;
+    }
+
+    public Boolean getReminderSent() {
+        return reminderSent;
+    }
+
+    public void setReminderSent(Boolean reminderSent) {
+        this.reminderSent = reminderSent;
     }
 
     public String getStatus() {
