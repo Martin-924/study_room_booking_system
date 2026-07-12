@@ -968,6 +968,143 @@ td small {
   letter-spacing: 0.04em;
 }
 
+/* ========== 智能选座 Agent ========== */
+
+.agent-input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.agent-input {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1.5px solid #d5e0dd;
+  border-radius: 10px;
+  background: #fff;
+  color: #1f2a2e;
+  font-size: 14px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.agent-input:focus {
+  outline: none;
+  border-color: #1f8a70;
+  box-shadow: 0 0 0 3px rgba(31, 138, 112, 0.15);
+}
+
+.agent-input:disabled {
+  background: #f0f3f2;
+  cursor: not-allowed;
+}
+
+.agent-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.agent-example-btn {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: #eef3f1;
+  color: #1f8a70;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid #d5e0dd;
+  white-space: nowrap;
+}
+
+.agent-example-btn:hover:not(:disabled) {
+  background: #d7e8e1;
+  border-color: #1f8a70;
+}
+
+.agent-example-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agent-log-panel {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.agent-logs {
+  display: grid;
+  gap: 4px;
+}
+
+.agent-log-entry {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.agent-log-user {
+  background: #f0f7ff;
+}
+
+.agent-log-agent {
+  background: #f5f7f6;
+  color: #3d5852;
+}
+
+.agent-log-info {
+  background: transparent;
+  padding-left: 24px;
+}
+
+.agent-log-success {
+  background: #e8f5ef;
+  color: #166f5d;
+  font-weight: 600;
+}
+
+.agent-log-error {
+  background: #fde8e5;
+  color: #a8362f;
+}
+
+.agent-log-time {
+  color: #9aabaa;
+  font-size: 11px;
+  font-family: monospace;
+  flex-shrink: 0;
+  min-width: 60px;
+}
+
+.agent-log-msg {
+  flex: 1;
+}
+
+.agent-typing {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #5a6a70;
+  font-style: italic;
+}
+
+.agent-dots {
+  animation: agentBlink 1.2s steps(3, end) infinite;
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+}
+
+@keyframes agentBlink {
+  0% { content: '…'; }
+  33% { content: '…'; }
+  66% { content: '…'; }
+  100% { content: '…'; }
+}
+
 /* ========== 自习室编辑弹窗 ========== */
 
 .room-edit-card {

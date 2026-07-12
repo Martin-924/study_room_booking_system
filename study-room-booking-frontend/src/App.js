@@ -1897,6 +1897,7 @@ function StudentDashboard({ user, onLogout, onUserUpdate }) {
   const tabs = [
     { key: 'home', label: '首页', icon: '🏠' },
     { key: 'reserve', label: '预约选座', icon: '💺' },
+    { key: 'agent', label: '智能选座', icon: '🤖' },
     { key: 'mine', label: '我的预约', icon: '📋' },
     { key: 'profile', label: '个人中心', icon: '👤' }
 ];
@@ -1911,6 +1912,9 @@ function StudentDashboard({ user, onLogout, onUserUpdate }) {
       )}
       {activeTab === 'reserve' && (
         <ReservationPanel user={user} buildings={buildings} rooms={rooms} onChanged={loadStudentData} setMessage={setMessage} />
+      )}
+      {activeTab === 'agent' && (
+        <AgentReservationPanel user={user} buildings={buildings} rooms={rooms} onChanged={loadStudentData} setMessage={setMessage} />
       )}
       {activeTab === 'mine' && (
         <StudentBookingPanel bookings={bookings} rooms={rooms} onChanged={loadStudentData} setMessage={setMessage} />
@@ -2206,6 +2210,321 @@ function BookingSuccessModal({ visible, booking, onClose }) {
           <button className="primary-btn" onClick={onClose}>知道了</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ======== DeepSeek API 调用 ========
+
+const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+const DEEPSEEK_MODEL = 'deepseek-chat';
+const DEEPSEEK_API_KEY = ''; // ⚡ 请在这里填写你的 DeepSeek API Key
+
+function buildSystemPrompt(buildings, rooms) {
+  const campuses = [...new Set(buildings.map(b => b.campus).filter(Boolean))];
+  const buildingList = buildings.map(b => `${b.name}（${b.campus}校区，楼层数：${b.floorCount}）`).join('；');
+  const roomList = rooms.map(r => `${r.name}（位于${r.campus}校区/${r.buildingName}，${r.floorNumber}层，开放时间：${r.openTime}-${r.closeTime}，座位${r.rowCount}行×${r.columnCount}列）`).join('；');
+
+  return `你是自习室预约系统的智能助手。你的任务是将用户的自然语言需求解析为结构化的预约参数。
+
+当前系统可用的校区：${campuses.join('、')}
+可用的楼栋：${buildingList}
+可用的自习室：${roomList}
+
+请从用户输入中提取以下 JSON 字段（仅输出 JSON，不要其他文字）：
+{
+  "date": "预约日期，格式 yyyy-MM-dd。如果用户说"今天"则返回今天日期(2026-07-12)，"明天"返回2026-07-13，"后天"返回2026-07-14。如果用户给了具体日期则使用该日期",
+  "startTime": "开始时间，格式 HH:mm。如果用户说"上午"则为08:00，"下午"为14:00，"晚上"为18:00。如果用户给了具体时间如"3点"则为15:00，"3点半"则为15:30。以半小时为步进",
+  "endTime": "结束时间，格式 HH:mm。通常开始时间后至少1小时。如果用户说"上午"则为12:00，"下午"为18:00，"晚上"为22:00。如果用户给了具体结束时间则使用",
+  "campus": "匹配到的校区名称，如果用户没有指定则为空字符串",
+  "buildingName": "匹配到的楼栋名称（需与上述楼栋列表完全一致），如果用户没有指定则为空字符串",
+  "floorNumber": "匹配到的楼层号（数字），如果用户没有指定则为空",
+  "roomName": "匹配到的自习室名称（需与上述自习室列表完全一致），如果用户没有指定则为空字符串"
+}
+
+注意：
+- 如果用户提到多个可能的自习室，选择一个最匹配的
+- 时间必须为半小时步进（如08:00, 08:30, 09:00...）
+- 日期必须使用 yyyy-MM-dd 格式
+- 只输出 JSON，不要输出任何说明文字`;
+}
+
+async function callDeepSeek(query, buildings, rooms, apiKey) {
+  const systemPrompt = buildSystemPrompt(buildings, rooms);
+  const todayStr = today();
+
+  const response = await fetch(DEEPSEEK_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: DEEPSEEK_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `今天是${todayStr}。用户说："${query}"` }
+      ],
+      temperature: 0.1,
+      max_tokens: 500
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`DeepSeek API 错误 (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('DeepSeek 返回为空');
+
+  // 提取 JSON
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error(`DeepSeek 返回格式错误：${content}`);
+  return JSON.parse(jsonMatch[0]);
+}
+
+function AgentReservationPanel({ user, buildings, rooms, onChanged, setMessage }) {
+  const [input, setInput] = useState('');
+  const [logs, setLogs] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [bookingSuccess, setBookingSuccess] = useState(null);
+  const [step, setStep] = useState(null);
+
+  const addLog = (msg, type = 'info') => {
+    setLogs((prev) => [...prev, { msg, type, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }]);
+  };
+
+  // 将 DeepSeek 返回的字段名映射到项目字段
+  const mapParsedToResult = (parsed) => {
+    const result = { date: '', startTime: '', endTime: '', campus: '', buildingId: '', roomId: '', confidence: 'low' };
+    result.date = parsed.date || today();
+    result.startTime = parsed.startTime || '';
+    result.endTime = parsed.endTime || '';
+    result.campus = parsed.campus || '';
+
+    if (parsed.buildingName) {
+      const building = buildings.find(b => b.name === parsed.buildingName);
+      if (building) result.buildingId = building.id;
+    }
+    if (parsed.roomName) {
+      const room = rooms.find(r => r.name === parsed.roomName);
+      if (room) {
+        result.roomId = room.id;
+        result.buildingId = room.buildingId;
+        result.campus = room.campus;
+        result.confidence = 'high';
+      }
+    }
+
+    // 如果没有精确自习室但有楼栋/楼层，自动匹配
+    if (!result.roomId && result.buildingId) {
+      const floorNum = parsed.floorNumber ? String(parsed.floorNumber) : '';
+      let candidates = rooms.filter(r => r.buildingId === result.buildingId);
+      if (floorNum) candidates = candidates.filter(r => String(r.floorNumber) === floorNum);
+      if (candidates.length > 0) {
+        result.roomId = candidates[0].id;
+        result.confidence = 'medium';
+        result._possibleRooms = candidates;
+      }
+    }
+
+    // 填充默认时间
+    if (!result.startTime) {
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const rounded = roundUpToStep(nowMin, 30);
+      result.startTime = minutesToTime(Math.min(rounded, 22 * 60 - 30));
+    }
+    if (!result.endTime) {
+      const endMin = timeToMinutes(result.startTime) + 60;
+      result.endTime = minutesToTime(Math.min(endMin, 22 * 60));
+    }
+
+    if (!result.roomId) result.confidence = 'low';
+
+    // 兜底：如果用户没有指定任何位置信息，自动选第一个自习室
+    if (result.confidence === 'low' && rooms.length > 0 && !parsed.campus && !parsed.buildingName && !parsed.roomName && !parsed.floorNumber) {
+      const firstRoom = rooms[0];
+      result.roomId = firstRoom.id;
+      result.buildingId = firstRoom.buildingId;
+      result.campus = firstRoom.campus;
+      result.confidence = 'medium';
+    }
+
+    return result;
+  };
+
+  const runAgent = async () => {
+    if (!input.trim() || busy) return;
+    if (!DEEPSEEK_API_KEY) {
+      addLog('请先在代码中填写 DEEPSEEK_API_KEY', 'error');
+      setBusy(false);
+      return;
+    }
+    setBusy(true);
+    setLogs([]);
+    setStep('parsing');
+    setBookingSuccess(null);
+
+    try {
+      addLog(`收到意图：${input}`, 'user');
+
+      // Step 1: 调用 DeepSeek 解析
+      addLog('正在调用 DeepSeek AI 解析意图…', 'agent');
+
+      const llmResult = await callDeepSeek(input, buildings, rooms, DEEPSEEK_API_KEY);
+
+      const parsed = mapParsedToResult(llmResult);
+
+      if (parsed.confidence === 'low') {
+        addLog('DeepSeek 未能匹配到可用的自习室，请换一种说法试试。', 'error');
+        setStep('error');
+        setBusy(false);
+        return;
+      }
+
+      const roomObj = rooms.find(r => r.id === parsed.roomId);
+      addLog(`📅 日期：${parsed.date}`, 'info');
+      addLog(`⏰ 时间：${parsed.startTime} - ${parsed.endTime}`, 'info');
+      addLog(`🏢 自习室：${roomObj ? roomObj.name + ' · ' + roomObj.location : '自动匹配'}`, 'info');
+
+      // Step 2: 查询座位
+      setStep('searching');
+      addLog('正在查询空闲座位…', 'agent');
+
+      const seatMap = await api(`/rooms/${parsed.roomId}/seats?date=${parsed.date}&startTime=${parsed.startTime}&endTime=${parsed.endTime}`);
+      const availableSeats = seatMap.seats.filter(s => s.status === 'AVAILABLE');
+
+      if (availableSeats.length === 0) {
+        addLog(`该时段没有可用座位。${roomObj ? roomObj.name : '自习室'} 暂时已满，请换个时间或自习室再试`, 'error');
+        setStep('error');
+        setBusy(false);
+        return;
+      }
+
+      // 选座策略：优先靠窗 + 有插座
+      const chosenSeat = availableSeats.sort((a, b) => {
+        let scoreA = 0, scoreB = 0;
+        if (a.nearWindow) scoreA += 2;
+        if (b.nearWindow) scoreB += 2;
+        if (a.powerSocket) scoreA += 1;
+        if (b.powerSocket) scoreB += 1;
+        return scoreB - scoreA;
+      })[0];
+
+      addLog(`💺 选中座位：${chosenSeat.seatNo}${chosenSeat.powerSocket ? ' · 有插座' : ''}${chosenSeat.nearWindow ? ' · 靠窗' : ''}`, 'info');
+
+      // Step 3: 创建预约
+      setStep('booking');
+      addLog('正在提交预约…', 'agent');
+
+      if (user.blacklisted) {
+        addLog('您已被加入黑名单，暂不能预约。请联系管理员处理', 'error');
+        setStep('error');
+        setBusy(false);
+        return;
+      }
+
+      await api('/bookings', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: user.id,
+          roomId: parsed.roomId,
+          seatId: chosenSeat.id,
+          bookingDate: parsed.date,
+          startTime: parsed.startTime,
+          endTime: parsed.endTime
+        })
+      });
+
+      setBookingSuccess({
+        roomName: roomObj?.name || '自习室',
+        seatNo: chosenSeat.seatNo,
+        bookingDate: parsed.date,
+        startTime: parsed.startTime,
+        endTime: parsed.endTime
+      });
+
+      addLog('✅ 预约成功！祝学习愉快 🎉', 'success');
+      setStep('done');
+      onChanged();
+    } catch (err) {
+      addLog(`❌ 预约失败：${err.message}`, 'error');
+      setStep('error');
+    }
+
+    setBusy(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      runAgent();
+    }
+  };
+
+  const examples = [
+    '帮我预约思明校区图书馆今天下午的座位',
+    '明天上午德旺图书馆',
+    '今天下午3点到5点，学武楼负一楼',
+    '帮我找一个有插座的座位，下午自习'
+  ];
+
+  return (
+    <div className="stack">
+      <section className="panel">
+        <h3>🤖 AI 智能选座</h3>
+        <p className="muted" style={{ margin: '-8px 0 16px', fontSize: '13px', color: '#5a6a70' }}>用自然语言描述你的需求，Agent 自动完成预约</p>
+        <div className="agent-input-row">
+          <input
+            type="text"
+            className="agent-input"
+            placeholder="例如：帮我预约思明校区图书馆今天下午的座位"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={busy}
+          />
+          <button className="primary-btn" onClick={runAgent} disabled={busy || !input.trim()}>
+            {busy ? '处理中…' : '执行预约'}
+          </button>
+        </div>
+        <div className="agent-examples">
+          {examples.map((ex, i) => (
+            <button
+              key={i}
+              className="agent-example-btn"
+              onClick={() => { setInput(ex); }}
+              disabled={busy}
+            >
+              {ex}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {logs.length > 0 && (
+        <section className="panel agent-log-panel">
+          <h3>Agent 执行日志</h3>
+          <div className="agent-logs">
+            {logs.map((log, i) => (
+              <div key={i} className={`agent-log-entry agent-log-${log.type}`}>
+                <span className="agent-log-time">{log.time}</span>
+                <span className="agent-log-msg">{log.msg}</span>
+              </div>
+            ))}
+            {busy && <div className="agent-typing">Agent 思考中<span className="agent-dots">…</span></div>}
+          </div>
+        </section>
+      )}
+
+      <BookingSuccessModal
+        visible={!!bookingSuccess}
+        booking={bookingSuccess}
+        onClose={() => setBookingSuccess(null)}
+      />
     </div>
   );
 }
