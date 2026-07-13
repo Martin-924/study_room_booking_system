@@ -733,13 +733,13 @@ function OverviewPanel({ overview, usage, timeStats, bookings, rooms, noShowStat
 
   // 计算各自习室的预约占比（热门程度，全量非取消预约）
   const displayUsage = useMemo(() => {
-    if (usage && usage.some(u => u.usageRate > 0)) return usage;
-    if (!rooms || !bookings) return usage || [];
+    if (!rooms || !bookings) return [];
     const active = bookings.filter(b => b.status !== 'CANCELLED');
     const totalBookings = active.length;
+    if (totalBookings === 0) return rooms.map(r => ({ roomId: r.id, roomName: r.name, buildingName: r.buildingName || '未分配楼栋', floorNumber: r.floorNumber || 1, usageRate: 0, bookingCount: 0 }));
     return rooms.map(room => {
       const roomCount = active.filter(b => b.roomId === room.id).length;
-      const rate = totalBookings > 0 ? Math.round((roomCount / totalBookings) * 100) : 0;
+      const rate = Math.round((roomCount / totalBookings) * 100);
       return {
         roomId: room.id, roomName: room.name,
         buildingName: room.buildingName || '未分配楼栋', floorNumber: room.floorNumber || 1,
@@ -747,7 +747,7 @@ function OverviewPanel({ overview, usage, timeStats, bookings, rooms, noShowStat
         bookingCount: roomCount,
       };
     });
-  }, [usage, rooms, bookings]);
+  }, [rooms, bookings]);
 
   return (
     <div className="stack">
@@ -1501,7 +1501,7 @@ function AdminBookingPanel({ bookings, rooms, onChanged, setMessage }) {
 
 function ReportsPanel({ reportDate, setReportDate, overview, usage, timeStats, bookings, rooms, onLoad }) {
   const allTimeStats = useTimeStats(bookings, reportDate);
-  const displayStats = (timeStats && timeStats.some(t => t.count > 0)) ? timeStats : allTimeStats;
+  const displayStats = allTimeStats;
   const dailyTotal = displayStats.reduce((s, d) => s + (d.count || 0), 0);
 
   // 从全部预约计算各自习室使用率（排除已取消，仅限所选日期）
